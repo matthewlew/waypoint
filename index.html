@@ -604,7 +604,7 @@ body{
     </div>
     <label class="sf-lbl">Departure</label>
     <div class="sf-row">
-      <input class="sf-inp" type="date" id="sDepD">
+      <input class="sf-inp" type="text" placeholder="e.g. Tomorrow" id="sDepD">
       <input class="sf-inp sf-mini" type="time" id="sDepT">
     </div>
     <label class="sf-lbl">Destinations &amp; nights</label>
@@ -618,7 +618,7 @@ body{
     </div>
     <button class="add-dest-btn" onclick="destAdd('destList')">+ Add destination</button>
     <label class="sf-lbl" for="sRetD">Return date</label>
-    <input class="sf-inp" type="date" id="sRetD">
+    <input class="sf-inp" type="text" placeholder="e.g. Next week" id="sRetD">
     <button class="setup-cta" onclick="go()">Build trip →</button>
   </div>
 </div>
@@ -711,6 +711,9 @@ body{
       <div class="carry-row" id="ai-carry-row">
         <input type="checkbox" id="ai-carry">
         <label for="ai-carry">Carry with me — purse or backpack, not checked luggage</label>
+      </div>
+      <div style="margin-bottom:8px">
+        <input class="sh-inp" id="ai-sc" placeholder="Scenario (e.g. 'If kayaking')" style="font-size:14px;padding:8px">
       </div>
       <button class="sh-cta" onclick="commitItem()">Add item</button>
       <button class="sh-cancel" onclick="closeAll()">Cancel</button>
@@ -947,6 +950,30 @@ function initItems(){
   ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,'tech',b,'tech',c,'',true)));
 }
 
+
+const ROUTINES = {
+  'Morning Skincare': ['Cleanser', 'Moisturiser', 'SPF 50'],
+  'Night Routine': ['Cleanser', 'Night Cream', 'Toothbrush', 'Toothpaste'],
+  'Shower': ['Body wash', 'Shampoo', 'Conditioner'],
+};
+
+function applyRoutine(dayId, routineName) {
+  const items = ROUTINES[routineName];
+  if (!items) return;
+  items.forEach(itemName => {
+    // Check if item already exists in the entire list
+    let item = ITEMS.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+    if (!item) {
+      // Create new
+      ITEMS.push(mkItem(itemName, 'health', 'main', 'toiletry', false, ''));
+      item = ITEMS[ITEMS.length - 1];
+    }
+    if (!item.dayIds.includes(dayId)) item.dayIds.push(dayId);
+  });
+  renderAll();
+  Haptic.success();
+}
+
 // ═══════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════
@@ -1069,7 +1096,13 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  let start = new Date();
+  let manualDate = false;
+  if (T.depDate && !isNaN(new Date(T.depDate).getTime())) {
+    start = new Date(T.depDate);
+  } else if (T.depDate) {
+    manualDate = true;
+  }
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
@@ -1077,7 +1110,7 @@ function buildDays(){
       const isFirst=n===1,isTransfer=d===dest.nights-1&&di<T.destinations.length-1;
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
-      days.push({id,destIdx:di,dayNum:n,date,
+      days.push({id,destIdx:di,dayNum:n,date,manualDate,
         isTravel:isFirst||isTransfer||isLast,
         dayText:old.dayText||(isFirst||isTransfer?'Flight':''),
         nightText:old.nightText||'',noteText:old.noteText||'',
@@ -1132,12 +1165,14 @@ function renderBanners(){
   }
   if(T.destinations.length){
     const d0=T.destinations[0].name.toLowerCase();
-    if(/mammoth|tahoe|aspen|vail|park city/.test(d0))
+    if(/mammoth|tahoe|aspen|vail|park city|snow|winter/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Expect 15–30°F. Pack base layers, waterproof outer, gloves.</div>`;
-    else if(/hawaii|cancun|miami|bali|tulum/.test(d0))
+    else if(/hawaii|cancun|miami|bali|tulum|beach|summer/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Hot and humid. Light fabrics, SPF, one light layer for A/C.</div>`;
-    else if(/london|paris|amsterdam|edinburgh/.test(d0))
+    else if(/london|paris|amsterdam|edinburgh|city/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Variable weather — layers and a compact rain jacket.</div>`;
+    else
+      h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Weather looking mild. Consider layering for cold mornings.</div>`;
   }
   document.getElementById('banners').innerHTML=h;
 }
@@ -1154,7 +1189,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.manualDate ? esc(T.depDate) : DOW[day.date.getDay()] + ' ' + fmt(day.date)} ·
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1177,7 +1212,25 @@ function buildDayCard(day){
         data-ph="Dinner, bar, hot tub, rest…"
         spellcheck="false" autocorrect="off" autocapitalize="sentences"
       >${buildEdHTML(day.nightText||'')}</div>
-      <div class="notes-head">notes</div>
+      <div class="notes-head" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>notes</span>
+        <button class="add-day-btn" style="padding:2px 8px;font-size:11px;" onclick="document.getElementById('routine-${day.id}').style.display='block'">+ Routine</button>
+      </div>
+      <div id="routine-${day.id}" style="display:none;margin-bottom:8px;">
+        <select class="sf-inp" style="padding:4px;font-size:13px;width:auto;" onchange="if(this.value){applyRoutine('${day.id}', this.value); this.value=''; this.parentElement.style.display='none';}">
+          <option value="">Select routine...</option>
+          <option value="Morning Skincare">Morning Skincare</option>
+          <option value="Night Routine">Night Routine</option>
+          <option value="Shower">Shower</option>
+        </select>
+      </div>
+      <div class="notes-head" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>quick add item</span>
+      </div>
+      <div style="margin-bottom:8px; display:flex; gap:8px;">
+        <input class="sf-inp" style="padding:4px;font-size:13px;flex:1;" placeholder="e.g. Toothbrush..." id="qa-${day.id}">
+        <button class="add-day-btn" style="padding:2px 8px;font-size:11px;" onclick="quickAdd('${day.id}', document.getElementById('qa-${day.id}').value); document.getElementById('qa-${day.id}').value='';">Add</button>
+      </div>
       <div class="notes-editor" id="ed-note-${day.id}" contenteditable="true"
         data-ph="Reminders, reservations, anything…"
         spellcheck="false" autocapitalize="sentences"
@@ -1188,10 +1241,26 @@ function buildDayCard(day){
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
+  let alerts = '';
+
+  // Existing hot tub logic
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+    alerts += `<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
-  return'';
+
+  // Day completeness logic based on items assigned to this day
+  const dayItems = ITEMS.filter(i => i.dayIds && i.dayIds.includes(day.id));
+
+  // Night activity detected without sleepwear
+  if (day.nightText.trim().length > 0 && !day._dismissed.has('sleepwear')) {
+    const hasSleepwear = dayItems.some(i => i.name.toLowerCase().includes('pyjamas') || i.name.toLowerCase().includes('sleepwear'));
+    if (!hasSleepwear) {
+      alerts += `<div class="smart-alert"><div class="sa-text">No sleepwear added for tonight.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+    }
+  }
+
+  return alerts;
 }
 
 // ─── FLIGHT STRIPS ───
@@ -1558,7 +1627,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.manualDate ? esc(T.depDate) : DOW[day.date.getDay()] + ' ' + fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1714,7 +1783,11 @@ function itemRow(item,showBag=false){
   </div>`;
 }
 function packCard({id,gid,name,sub,count,open,editType,body}){
-  return`<div class="card" id="crd-${id}" data-id="${id}">
+  let dropHandler = '';
+  if (editType === 'bag') dropHandler = `ondragover="event.preventDefault()" ondrop="handleBagDrop(event, '${gid}')"`;
+  else if (editType === 'purpose') dropHandler = `ondragover="event.preventDefault()" ondrop="handlePurposeDrop(event, '${gid}')"`;
+
+  return `<div class="card" id="crd-${id}" data-id="${id}" ${dropHandler}>
     <div class="card-hd${open?' open':''}" onclick="togglePackCard('${id}')">
       <div class="card-hd-left">
         <div class="card-name">${esc(name)}</div>
@@ -1818,6 +1891,31 @@ function commitGroup(){
   closeAll();Haptic.medium();renderPack();
 }
 
+
+function quickAdd(dayId, nm) {
+  if (!nm.trim()) return;
+  ITEMS.push(mkItem(nm.trim(), 'health', 'main', 'toiletry', false, ''));
+  ITEMS[ITEMS.length - 1].dayIds.push(dayId);
+
+  let toast = document.createElement('div');
+  toast.textContent = 'Saved to Closet';
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.background = 'hsl(var(--foreground))';
+  toast.style.color = '#fff';
+  toast.style.padding = '8px 16px';
+  toast.style.borderRadius = 'var(--rs)';
+  toast.style.zIndex = '9999';
+  toast.style.fontSize = '14px';
+  toast.style.animation = 'tipIn .2s ease';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2500);
+
+  renderAll();
+  Haptic.success();
+}
 // ═══════════════════════════════════════
 //  COMMIT ITEM
 // ═══════════════════════════════════════
@@ -1835,6 +1933,29 @@ function commitItem(){
     else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
     else{purId=aiCtx.groupId;}
     ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    const added = ITEMS[ITEMS.length - 1];
+    if (!added.scenarios) added.scenarios = [];
+    const scEl = document.getElementById('ai-sc');
+    if (scEl && scEl.value.trim()) {
+      added.scenarios.push(scEl.value.trim());
+    }
+
+    // Show toast
+    let toast = document.createElement('div');
+    toast.textContent = 'Saved to Closet';
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.background = 'hsl(var(--foreground))';
+    toast.style.color = 'hsl(var(--background))';
+    toast.style.padding = '8px 16px';
+    toast.style.borderRadius = 'var(--rs)';
+    toast.style.zIndex = '9999';
+    toast.style.fontSize = '14px';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+
     closeAll();Haptic.medium();renderPack();
   }
 }

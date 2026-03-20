@@ -662,6 +662,7 @@ body{
         <button class="vpill on" onclick="setPackView('category')">By category</button>
         <button class="vpill"    onclick="setPackView('bag')">By bag</button>
         <button class="vpill"    onclick="setPackView('purpose')">By purpose</button>
+        <button class="vpill"    onclick="setPackView('day')">By day</button>
       </div>
       <div class="pack-wrap" id="packContent"></div>
     </div>
@@ -708,11 +709,25 @@ body{
       <div class="sheet-sub"   id="ai-sub"></div>
       <input class="sh-inp" id="ai-inp" placeholder="Item name…" autocomplete="off"
         onkeydown="if(event.key==='Enter'){event.preventDefault();commitItem()}">
+      <input class="sh-inp" id="ai-scenario" placeholder="Scenario (e.g. 'If raining', optional)" autocomplete="off">
       <div class="carry-row" id="ai-carry-row">
         <input type="checkbox" id="ai-carry">
         <label for="ai-carry">Carry with me — purse or backpack, not checked luggage</label>
       </div>
       <button class="sh-cta" onclick="commitItem()">Add item</button>
+      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET: Add routine -->
+<div class="overlay" id="ovRoutine" onclick="if(event.target===this)closeAll()">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-body">
+      <div class="sheet-title">Add routine</div>
+      <div class="sheet-sub" id="routine-sub">Select a routine to add all its items</div>
+      <div id="routine-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>
       <button class="sh-cancel" onclick="closeAll()">Cancel</button>
     </div>
   </div>
@@ -897,9 +912,20 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 //  ITEM STORE
 // ═══════════════════════════════════════
+const ROUTINES = [
+  {id:'skincare_am', name:'Morning Skincare', items:[['Cleanser','purse'],['Moisturiser','purse'],['SPF 50','purse']]},
+  {id:'skincare_pm', name:'Night Skincare', items:[['Makeup remover','main'],['Cleanser','purse'],['Night cream','main']]},
+  {id:'shower', name:'Shower Routine', items:[['Shampoo','main'],['Conditioner','main'],['Body wash','main']]}
+];
+
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+  return{id:'item-'+(itemIdSeq++),name,
+    categoryIds:catId?[catId]:[],
+    bagIds:bagId?[bagId]:[],
+    purposeIds:purId?[purId]:[],
+    dayIds:[],
+    scenarios:[],
     carry,checked:false,auto,note};
 }
 
@@ -1126,9 +1152,11 @@ function renderBanners(){
   let h='';
   if(T.depDate&&T.depTime){
     const dep=new Date(T.depDate+'T'+T.depTime),hr=(dep-Date.now())/3.6e6;
-    if(hr>0&&hr<24) h+=`<div class="banner warn"><strong>Pack now</strong> — leaving in ${Math.round(hr)}h.</div>`;
-    else if(hr>=24&&hr<48) h+=`<div class="banner warn"><strong>Pack tonight</strong> — departing tomorrow at ${T.depTime}.</div>`;
-    else if(hr>=48) h+=`<div class="banner warn">Pack by <strong>${fmtLong(new Date(dep-172800000))}</strong> — ${Math.ceil(hr/24)} days to go.</div>`;
+    if(!isNaN(hr)){
+      if(hr>0&&hr<24) h+=`<div class="banner warn"><strong>Pack now</strong> — leaving in ${Math.round(hr)}h.</div>`;
+      else if(hr>=24&&hr<48) h+=`<div class="banner warn"><strong>Pack tonight</strong> — departing tomorrow at ${T.depTime}.</div>`;
+      else if(hr>=48) h+=`<div class="banner warn">Pack by <strong>${fmtLong(new Date(dep-172800000))}</strong> — ${Math.ceil(hr/24)} days to go.</div>`;
+    }
   }
   if(T.destinations.length){
     const d0=T.destinations[0].name.toLowerCase();
@@ -1154,7 +1182,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${T.depDate?`${DOW[day.date.getDay()]} ${fmt(day.date)} ·`:''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1186,11 +1214,35 @@ function buildDayCard(day){
   </div>`;
 }
 
+function checkDayCompleteness(dayId){
+  const day = days.find(d=>d.id===dayId);
+  if(!day) return [];
+  const text = (day.dayText+' '+day.nightText);
+  const acts = detectActs(text);
+  const dayItems = ITEMS.filter(i=>i.dayIds.includes(dayId));
+  const missing = new Set();
+  acts.forEach(act=>{
+    [...act.day,...act.night].forEach(req=>{
+      // simplistic check: if no day item's name includes the required term (case-insensitive)
+      if(!dayItems.some(i=>i.name.toLowerCase().includes(req.toLowerCase()))){
+        missing.add(req);
+      }
+    });
+  });
+  return [...missing];
+}
+
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  const missing = checkDayCompleteness(day.id);
+  if(missing.length && !day._dismissed.has('missing')){
+    return`<div class="smart-alert"><div class="sa-text">Missing essentials: ${esc(missing.slice(0,3).join(', '))}...</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','missing')">Skip</span></div>`;
+  }
   return'';
 }
 
@@ -1558,7 +1610,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${T.depDate?`${DOW[day.date.getDay()]} ${fmt(day.date)} · `:''}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1612,10 +1664,12 @@ function openAddOutfit(dayId,slot){
 function setPackView(v){
   packView=v;
   document.querySelectorAll('.vpill').forEach((b,i)=>{
-    b.classList.toggle('on',['category','bag','purpose'][i]===v);});
-  const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group'};
+    b.classList.toggle('on',['category','bag','purpose','day'][i]===v);});
+  const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group',day:''};
   const sa=document.getElementById('packSecAct');
-  sa.textContent=labels[v];sa.onclick=()=>openAddGroup(v);
+  sa.textContent=labels[v]||'';
+  if(labels[v]) sa.onclick=()=>openAddGroup(v);
+  else sa.onclick=null;
   Haptic.light();renderPack();
 }
 function renderPack(){
@@ -1637,7 +1691,8 @@ function renderPack(){
   let html='';
   if(packView==='category') html=renderByCategory();
   else if(packView==='bag') html=renderByBag();
-  else html=renderByPurpose();
+  else if(packView==='purpose') html=renderByPurpose();
+  else html=renderByDay();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
   if(cgl)initDrag(cgl,newOrder=>{
@@ -1660,12 +1715,12 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
-      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
+      body:items.map(i=>itemRow(i)).join('')+`<div style="display:flex;gap:12px"><div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div><div class="row-add" onclick="openRoutineModal('cat','${cat.id}')">+ Add routine</div></div>`});
   });
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
@@ -1676,12 +1731,12 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
-      body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
+      body:items.map(i=>itemRow(i,true)).join('')+`<div style="display:flex;gap:12px"><div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div><div class="row-add" onclick="openRoutineModal('bag','${bag.id}')">+ Add routine</div></div>`});
   });
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
@@ -1692,29 +1747,50 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
-      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
+      body:items.map(i=>itemRow(i)).join('')+`<div style="display:flex;gap:12px"><div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div><div class="row-add" onclick="openRoutineModal('pur','${pur.id}')">+ Add routine</div></div>`});
   });
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
+
+function renderByDay(){
+  let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by the day you'll need them.</p>
+    <div class="card-group-list" id="cardGroupList">`;
+  days.forEach(day=>{
+    const items=ITEMS.filter(i=>i.dayIds.includes(day.id));
+    const done=items.filter(i=>i.checked).length;
+    const open=openCards.has('day-'+day.id);
+    const name=`Day ${day.dayNum}`;
+    const destName=T.destinations[day.destIdx]?T.destinations[day.destIdx].name:'';
+    h+=packCard({id:'day-'+day.id,gid:day.id,name:name,sub:destName,
+      count:`${done}/${items.length}`,open,editType:'day',
+      body:items.map(i=>itemRow(i)).join('')+`<div style="display:flex;gap:12px"><div class="row-add" onclick="openAddItem('day','${day.id}')">+ Add item to ${name}</div><div class="row-add" onclick="openRoutineModal('day','${day.id}')">+ Add routine</div></div>`});
+  });
+  h+=`</div>`;
+  return h;
+}
 function itemRow(item,showBag=false){
   const ck=item.checked;
-  return`<div class="list-row" data-item-id="${item.id}">
+  return`<div class="list-row" data-item-id="${item.id}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${item.id}')">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
+    ${item.scenarios&&item.scenarios.length?`<span class="carry-lbl" style="background:hsl(var(--primary));color:hsl(var(--primary-foreground))">${esc(item.scenarios[0])}</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds.length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryIds[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
 function packCard({id,gid,name,sub,count,open,editType,body}){
-  return`<div class="card" id="crd-${id}" data-id="${id}">
+  return`<div class="card" id="crd-${id}" data-id="${id}"
+    ondragover="event.preventDefault();this.classList.add('card-drag-over')"
+    ondragleave="this.classList.remove('card-drag-over')"
+    ondrop="handleItemDrop(event,'${editType}','${gid}')">
     <div class="card-hd${open?' open':''}" onclick="togglePackCard('${id}')">
       <div class="card-hd-left">
         <div class="card-name">${esc(name)}</div>
@@ -1734,6 +1810,38 @@ function packCard({id,gid,name,sub,count,open,editType,body}){
     <div class="card-body${open?' open':''}">${body}</div>
   </div>`;
 }
+function addRoutineItems(routineId, contextType, contextId){
+  const routine = ROUTINES.find(r=>r.id===routineId);
+  if(!routine) return;
+  routine.items.forEach(([n, defaultBag])=>{
+    let catId='health',bagId=defaultBag,purId='toiletry',dayId=null;
+    if(contextType==='cat') catId=contextId;
+    if(contextType==='bag') bagId=contextId;
+    if(contextType==='purpose') purId=contextId;
+    if(contextType==='day') dayId=contextId;
+    const item = mkItem(n,catId,bagId,purId,true);
+    if(dayId) item.dayIds.push(dayId);
+    ITEMS.push(item);
+  });
+  Haptic.success();renderPack();closeAll();
+}
+
+function handleItemDrop(e,type,gid){
+  e.preventDefault();
+  const c = e.currentTarget;
+  if(c) c.classList.remove('card-drag-over');
+  const itemId = e.dataTransfer.getData('text/plain');
+  if(!itemId) return;
+  const item = ITEMS.find(i=>i.id===itemId);
+  if(!item) return;
+  let changed = false;
+  if(type==='cat'){ if(!item.categoryIds.includes(gid)){item.categoryIds.push(gid);changed=true;} }
+  else if(type==='bag'){ if(!item.bagIds.includes(gid)){item.bagIds.push(gid);changed=true;} }
+  else if(type==='purpose'){ if(!item.purposeIds.includes(gid)){item.purposeIds.push(gid);changed=true;} }
+  else if(type==='day'){ if(!item.dayIds.includes(gid)){item.dayIds.push(gid);changed=true;} }
+  if(changed){ Haptic.success(); renderPack(); }
+}
+
 function togglePackCard(id){
   openCards.has(id)?openCards.delete(id):openCards.add(id);Haptic.light();
   const card=document.getElementById('crd-'+id);
@@ -1760,13 +1868,28 @@ function toggleItem(itemId){
 function openAddItem(viewType,groupId){
   aiCtx={type:'packitem',viewType,groupId};
   const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
-    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:
+    viewType==='day'?`Day ${days.find(d=>d.id===groupId)?.dayNum}`:PURPOSES.find(p=>p.id===groupId)?.name;
   document.getElementById('ai-title').textContent='Add item';
   document.getElementById('ai-sub').textContent=groupName||'';
   document.getElementById('ai-inp').value='';
+  const scenarioInput = document.getElementById('ai-scenario');
+  if(scenarioInput) scenarioInput.value='';
   document.getElementById('ai-carry-row').style.display='flex';
   document.getElementById('ai-carry').checked=false;
   openOv('ovAI');setTimeout(()=>document.getElementById('ai-inp').focus(),280);
+}
+
+function openRoutineModal(viewType,groupId){
+  const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
+    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:
+    viewType==='day'?`Day ${days.find(d=>d.id===groupId)?.dayNum}`:PURPOSES.find(p=>p.id===groupId)?.name;
+  document.getElementById('routine-sub').textContent=`Add to ${groupName||''}`;
+
+  const list = document.getElementById('routine-list');
+  list.innerHTML = ROUTINES.map(r=>`<button class="sh-cta" style="background:hsl(var(--secondary));color:hsl(var(--secondary-foreground))" onclick="addRoutineItems('${r.id}','${viewType}','${groupId}')">+ ${esc(r.name)} (${r.items.length} items)</button>`).join('');
+
+  openOv('ovRoutine');
 }
 function openEditGroup(type,id){
   editCtx={type,id};
@@ -1792,9 +1915,21 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){
+    CATS=CATS.filter(c=>c.id!==id);
+    ITEMS.forEach(i=>{i.categoryIds=i.categoryIds.filter(cid=>cid!==id)});
+    catOrder=catOrder.filter(x=>x!==id);
+  }
+  else if(type==='bag'){
+    BAGS=BAGS.filter(b=>b.id!==id);
+    ITEMS.forEach(i=>{i.bagIds=i.bagIds.filter(bid=>bid!==id)});
+    bagOrder=bagOrder.filter(x=>x!==id);
+  }
+  else{
+    PURPOSES=PURPOSES.filter(p=>p.id!==id);
+    ITEMS.forEach(i=>{i.purposeIds=i.purposeIds.filter(pid=>pid!==id)});
+    purposeOrder=purposeOrder.filter(x=>x!==id);
+  }
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1830,11 +1965,17 @@ function commitItem(){
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
   }else if(aiCtx.type==='packitem'){
-    let catId='health',bagId='main',purId='toiletry';
+    let catId='health',bagId='main',purId='toiletry',dayId=null;
     if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
-    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
-    else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;catId='';purId='';}
+    else if(aiCtx.viewType==='day'){dayId=aiCtx.groupId;catId='';bagId='';purId='';}
+    else{purId=aiCtx.groupId;catId='';bagId='';}
+    const item = mkItem(nm,catId,bagId,purId,carry);
+    if(dayId) item.dayIds.push(dayId);
+    const scenarioInput = document.getElementById('ai-scenario');
+    const scenario = scenarioInput ? scenarioInput.value.trim() : '';
+    if(scenario) item.scenarios.push(scenario);
+    ITEMS.push(item);
     closeAll();Haptic.medium();renderPack();
   }
 }

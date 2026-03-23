@@ -659,7 +659,7 @@ body{
         <div class="sec-act" id="packSecAct"></div>
       </div>
       <div class="view-pills">
-        <button class="vpill on" onclick="setPackView('category')">By category</button>
+        <button class="vpill on" onclick="setPackView('day')">By day</button>
         <button class="vpill"    onclick="setPackView('bag')">By bag</button>
         <button class="vpill"    onclick="setPackView('purpose')">By purpose</button>
       </div>
@@ -708,6 +708,10 @@ body{
       <div class="sheet-sub"   id="ai-sub"></div>
       <input class="sh-inp" id="ai-inp" placeholder="Item name…" autocomplete="off"
         onkeydown="if(event.key==='Enter'){event.preventDefault();commitItem()}">
+      <div class="carry-row" id="ai-routine-row" style="padding-bottom:0">
+        <input type="checkbox" id="ai-routine">
+        <label for="ai-routine">Add to all days (Routine)</label>
+      </div>
       <div class="carry-row" id="ai-carry-row">
         <input type="checkbox" id="ai-carry">
         <label for="ai-carry">Carry with me — purse or backpack, not checked luggage</label>
@@ -899,8 +903,18 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
-    carry,checked:false,auto,note};
+  return{
+    id:'item-'+(itemIdSeq++),
+    name,
+    categoryIds: catId ? [catId] : [],
+    bagIds: bagId ? [bagId] : [],
+    purposeIds: purId ? [purId] : [],
+    dayIds: [],
+    carry,
+    checked:false,
+    auto,
+    note
+  };
 }
 
 let CATS=[
@@ -953,7 +967,7 @@ function initItems(){
 let T={name:'',who:[],depDate:'',depTime:'08:00',retDate:'',destinations:[]};
 let days=[];
 let openCards=new Set();
-let packView='category';
+let packView='day';
 let outView='pack';
 let customOut={};
 let aiCtx=null,editCtx=null,agCtx=null;
@@ -987,6 +1001,11 @@ function go(){
   T.name=document.getElementById('sName').value.trim()||'My Trip';
   T.who=[...whoArr];
   T.depDate=document.getElementById('sDepD').value;
+  if(!T.depDate){
+    const d=new Date();
+    d.setDate(d.getDate()+1);
+    T.depDate=d.toISOString().split('T')[0];
+  }
   T.depTime=document.getElementById('sDepT').value||'08:00';
   T.retDate=document.getElementById('sRetD').value;
   readDests('destList');
@@ -1125,12 +1144,15 @@ function renderDays(){
 function renderBanners(){
   let h='';
   if(T.depDate&&T.depTime){
-    const dep=new Date(T.depDate+'T'+T.depTime),hr=(dep-Date.now())/3.6e6;
-    if(hr>0&&hr<24) h+=`<div class="banner warn"><strong>Pack now</strong> — leaving in ${Math.round(hr)}h.</div>`;
-    else if(hr>=24&&hr<48) h+=`<div class="banner warn"><strong>Pack tonight</strong> — departing tomorrow at ${T.depTime}.</div>`;
-    else if(hr>=48) h+=`<div class="banner warn">Pack by <strong>${fmtLong(new Date(dep-172800000))}</strong> — ${Math.ceil(hr/24)} days to go.</div>`;
+    const dep=new Date(T.depDate+'T'+T.depTime);
+    if (!isNaN(dep.getTime())) {
+      const hr=(dep-Date.now())/3.6e6;
+      if(hr>0&&hr<24) h+=`<div class="banner warn"><strong>Pack now</strong> — leaving in ${Math.round(hr)}h.</div>`;
+      else if(hr>=24&&hr<48) h+=`<div class="banner warn"><strong>Pack tonight</strong> — departing tomorrow at ${T.depTime}.</div>`;
+      else if(hr>=48) h+=`<div class="banner warn">Pack by <strong>${fmtLong(new Date(dep-172800000))}</strong> — ${Math.ceil(hr/24)} days to go.</div>`;
+    }
   }
-  if(T.destinations.length){
+  if(T.destinations&&T.destinations.length){
     const d0=T.destinations[0].name.toLowerCase();
     if(/mammoth|tahoe|aspen|vail|park city/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Expect 15–30°F. Pack base layers, waterproof outer, gloves.</div>`;
@@ -1138,6 +1160,8 @@ function renderBanners(){
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Hot and humid. Light fabrics, SPF, one light layer for A/C.</div>`;
     else if(/london|paris|amsterdam|edinburgh/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Variable weather — layers and a compact rain jacket.</div>`;
+    else
+      h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Check local weather before packing.</div>`;
   }
   document.getElementById('banners').innerHTML=h;
 }
@@ -1149,7 +1173,7 @@ function buildDayCard(day){
   // Build any flight strips for detected codes
   const flightStrips=buildFlightStrips(day);
 
-  return`<div class="card${day.isTravel?' travel':''}" id="card-${day.id}">
+  return`<div class="card${day.isTravel?' travel':''}" id="card-${day.id}" ondragover="event.preventDefault(); this.classList.add('card-drag-over')" ondragleave="this.classList.remove('card-drag-over')" ondrop="handleItemDrop(event, 'day', '${day.id}')">
     <div class="card-hd${isOpen?' open':''}" onclick="toggleCard('${day.id}')">
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
@@ -1188,9 +1212,26 @@ function buildDayCard(day){
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
-  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
-      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+  const dayItems = ITEMS.filter(i => i.dayIds.includes(day.id));
+
+  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim')){
+    if(!dayItems.some(i => i.name.toLowerCase().includes('swim')))
+      return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+  }
+
+  if(/(sleep|rest)/.test(all) && !day._dismissed.has('sleep')){
+    if(!dayItems.some(i => i.name.toLowerCase().includes('sleep') || i.name.toLowerCase().includes('pyjama')))
+      return`<div class="smart-alert"><div class="sa-text">No sleepwear added for this day.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','sleep')">Skip</span></div>`;
+  }
+
+  if(/(dinner|fine dining)/.test(all) && !day._dismissed.has('dinner')){
+    if(!dayItems.some(i => i.name.toLowerCase().includes('outfit') || i.name.toLowerCase().includes('dress')))
+      return`<div class="smart-alert"><div class="sa-text">No evening outfit added.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','dinner')">Skip</span></div>`;
+  }
+
   return'';
 }
 
@@ -1612,10 +1653,14 @@ function openAddOutfit(dayId,slot){
 function setPackView(v){
   packView=v;
   document.querySelectorAll('.vpill').forEach((b,i)=>{
-    b.classList.toggle('on',['category','bag','purpose'][i]===v);});
-  const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group'};
+    b.classList.toggle('on',['day','bag','purpose'][i]===v);});
   const sa=document.getElementById('packSecAct');
-  sa.textContent=labels[v];sa.onclick=()=>openAddGroup(v);
+  if(v==='day'){
+    sa.textContent='';sa.onclick=null;
+  }else{
+    const labels={bag:'+ Bag',purpose:'+ Group'};
+    sa.textContent=labels[v];sa.onclick=()=>openAddGroup(v);
+  }
   Haptic.light();renderPack();
 }
 function renderPack(){
@@ -1635,13 +1680,13 @@ function renderPack(){
       .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
   }
   let html='';
-  if(packView==='category') html=renderByCategory();
+  if(packView==='day') html=renderByDay();
   else if(packView==='bag') html=renderByBag();
   else html=renderByPurpose();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
   if(cgl)initDrag(cgl,newOrder=>{
-    if(packView==='category')catOrder=newOrder.filter(Boolean);
+    if(packView==='day') {} // No ordering for days
     else if(packView==='bag')bagOrder=newOrder.filter(Boolean);
     else purposeOrder=newOrder.filter(Boolean);
   });
@@ -1654,20 +1699,27 @@ function renderPack(){
   });
 }
 
-function renderByCategory(){
-  const ordered=catOrder.map(id=>CATS.find(c=>c.id===id)).filter(Boolean)
-    .concat(CATS.filter(c=>!catOrder.includes(c.id)));
+function renderByDay(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
-  ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+
+  days.forEach(day=>{
+    const items=ITEMS.filter(i=>i.dayIds.includes(day.id));
     const done=items.filter(i=>i.checked).length;
-    const open=openCards.has('cat-'+cat.id);
-    h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
-      count:`${done}/${items.length}`,open,editType:'cat',
-      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
+    const open=openCards.has('day-'+day.id);
+    h+=packCard({id:'day-'+day.id,gid:day.id,name:'Day '+day.dayNum,sub:DOW[day.date.getDay()]+' '+fmt(day.date),
+      count:`${done}/${items.length}`,open,editType:'day',
+      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('day','${day.id}')">+ Add item</div>`});
   });
-  h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
+
+  const unassigned=ITEMS.filter(i=>i.dayIds.length===0);
+  const uDone=unassigned.filter(i=>i.checked).length;
+  const uOpen=openCards.has('day-unassigned');
+  h+=packCard({id:'day-unassigned',gid:'unassigned',name:'Unassigned to days',sub:'Items packed but not tied to a specific day',
+    count:`${uDone}/${unassigned.length}`,open:uOpen,editType:'day',
+    body:unassigned.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('day','unassigned')">+ Add item</div>`});
+
+  h+=`</div>`;
   return h;
 }
 function renderByBag(){
@@ -1676,7 +1728,7 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1692,7 +1744,7 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1704,17 +1756,39 @@ function renderByPurpose(){
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
-  return`<div class="list-row" data-item-id="${item.id}">
+  return`<div class="list-row" data-item-id="${item.id}" draggable="true" ondragstart="event.dataTransfer.setData('itemId', '${item.id}')">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds?.length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryIds[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
+function handleItemDrop(event, type, targetId) {
+  event.preventDefault();
+  const card = event.currentTarget;
+  card.classList.remove('card-drag-over');
+  const itemId = event.dataTransfer.getData('itemId');
+  if (!itemId) return;
+  const item = ITEMS.find(i => i.id === itemId);
+  if (!item) return;
+
+  if (type === 'day') {
+    if (targetId === 'unassigned') item.dayIds = [];
+    else if (!item.dayIds.includes(targetId)) item.dayIds.push(targetId);
+  } else if (type === 'bag') {
+    if (!item.bagIds.includes(targetId)) item.bagIds.push(targetId);
+  } else if (type === 'purpose') {
+    if (!item.purposeIds.includes(targetId)) item.purposeIds.push(targetId);
+  }
+
+  Haptic.medium();
+  renderPack();
+}
+
 function packCard({id,gid,name,sub,count,open,editType,body}){
-  return`<div class="card" id="crd-${id}" data-id="${id}">
+  return`<div class="card" id="crd-${id}" data-id="${id}" ondragover="event.preventDefault(); this.classList.add('card-drag-over')" ondragleave="this.classList.remove('card-drag-over')" ondrop="handleItemDrop(event, '${editType || 'day'}', '${gid}')">
     <div class="card-hd${open?' open':''}" onclick="togglePackCard('${id}')">
       <div class="card-hd-left">
         <div class="card-name">${esc(name)}</div>
@@ -1824,6 +1898,8 @@ function commitGroup(){
 function commitItem(){
   const nm=document.getElementById('ai-inp').value.trim();if(!nm||!aiCtx)return;
   const carry=document.getElementById('ai-carry').checked;
+  const isRoutine = document.getElementById('ai-routine').checked;
+
   if(aiCtx.type==='outfit'){
     const key=aiCtx.dayId+aiCtx.slot;
     if(!customOut[key])customOut[key]=[];
@@ -1833,10 +1909,31 @@ function commitItem(){
     let catId='health',bagId='main',purId='toiletry';
     if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
     else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
-    else{purId=aiCtx.groupId;}
+    else if(aiCtx.viewType==='pur'){purId=aiCtx.groupId;}
     ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+
+    if(isRoutine){
+      ITEMS[ITEMS.length-1].dayIds = days.map(d=>d.id);
+    } else if (aiCtx.viewType === 'day' && aiCtx.groupId !== 'unassigned') {
+      ITEMS[ITEMS.length-1].dayIds = [aiCtx.groupId];
+    }
+
+    showToast('Saved to Closet');
     closeAll();Haptic.medium();renderPack();
   }
+}
+
+function showToast(msg) {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:hsl(var(--primary));color:#fff;padding:8px 16px;border-radius:20px;font-size:14px;display:none;z-index:1000';
+    document.body.appendChild(toast);
+  }
+  toast.innerText = msg;
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 2000);
 }
 
 // ═══════════════════════════════════════

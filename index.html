@@ -659,9 +659,9 @@ body{
         <div class="sec-act" id="packSecAct"></div>
       </div>
       <div class="view-pills">
-        <button class="vpill on" onclick="setPackView('category')">By category</button>
+        <button class="vpill on" onclick="setPackView('day')">By day</button>
         <button class="vpill"    onclick="setPackView('bag')">By bag</button>
-        <button class="vpill"    onclick="setPackView('purpose')">By purpose</button>
+        <button class="vpill"    onclick="setPackView('purpose')">By group</button>
       </div>
       <div class="pack-wrap" id="packContent"></div>
     </div>
@@ -898,20 +898,11 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+function mkItem(name,dayIds=[],bagIds=[],purposeIds=[],carry=false,note='',auto=false){
+  return{id:'item-'+(itemIdSeq++),name,dayIds,bagIds,purposeIds,
     carry,checked:false,auto,note};
 }
 
-let CATS=[
-  {id:'skincare',name:'Skincare',  type:'toi'},
-  {id:'hair',    name:'Hair',      type:'toi'},
-  {id:'body',    name:'Body',      type:'toi'},
-  {id:'makeup',  name:'Makeup',    type:'toi'},
-  {id:'health',  name:'Health & meds',type:'toi'},
-  {id:'food',    name:'Food box',  type:'sup',desc:'Car camping / road trip food'},
-  {id:'tech',    name:'Tech & docs',type:'sup',desc:'Chargers, devices, documents'},
-];
 let BAGS=[
   {id:'purse',   name:'Purse / Tote', desc:'On your body — security, under seat'},
   {id:'backpack',name:'Backpack',      desc:'Accessible — backseat or under seat'},
@@ -936,15 +927,15 @@ function initItems(){
     {cat:'makeup',  items:[['Foundation','main',false],['Mascara','main',false],['Lip product','purse',true],['Eyeshadow palette','main',false],['Makeup brushes','main',false],['Makeup remover','main',false]]},
     {cat:'health',  items:[['Prescription meds','purse',true],['Pain relief','purse',true],['Plasters','main',false],['Hand sanitiser','purse',true]]},
   ];
-  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,cat,b,'toiletry',c,'',true))));
+  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,[],[b],['toiletry'],c,'',true))));
   [['Instant noodles','trunk',false,''],['Snacks','backseat',false,'For the car'],
    ['Tupperware','trunk',false,'To eat with'],['Utensils','trunk',false,''],
    ['Reusable water bottles','backseat',false,'']
-  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,'food',b,'food',c,note,true)));
+  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,[],[b],['food'],c,note,true)));
   [['Passport / ID','purse',true],['Phone + charger','backpack',false],
    ['Power bank','purse',true],['Laptop + charger','backpack',false],
    ['Universal adapter','backpack',false],['Earbuds','backpack',false]
-  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,'tech',b,'tech',c,'',true)));
+  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,[],[b],['tech'],c,'',true)));
 }
 
 // ═══════════════════════════════════════
@@ -953,7 +944,7 @@ function initItems(){
 let T={name:'',who:[],depDate:'',depTime:'08:00',retDate:'',destinations:[]};
 let days=[];
 let openCards=new Set();
-let packView='category';
+let packView='day';
 let outView='pack';
 let customOut={};
 let aiCtx=null,editCtx=null,agCtx=null;
@@ -991,7 +982,6 @@ function go(){
   T.retDate=document.getElementById('sRetD').value;
   readDests('destList');
   initItems();
-  catOrder=CATS.map(c=>c.id);
   bagOrder=BAGS.map(b=>b.id);
   purposeOrder=PURPOSES.map(p=>p.id);
   buildDays();
@@ -1069,11 +1059,14 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  const start=T.depDate?new Date(T.depDate+'T12:00:00'):null;
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
-      const date=new Date(start);date.setDate(start.getDate()+(n-1));
+      let date=null;
+      if (start) {
+        date=new Date(start);date.setDate(start.getDate()+(n-1));
+      }
       const isFirst=n===1,isTransfer=d===dest.nights-1&&di<T.destinations.length-1;
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
@@ -1154,7 +1147,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.date?`${DOW[day.date.getDay()]} ${fmt(day.date)} ·`:''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1191,6 +1184,16 @@ function buildAlert(day){
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  const assignedItems = ITEMS.filter(i=>i.dayIds.includes(day.id));
+  if (day.nightText && day.nightText.trim().length > 0 && assignedItems.length > 0 && !day._dismissed.has('sleepwear')) {
+    const hasSleepwear = assignedItems.some(i => /(sleepwear|pyjamas|pajamas|evening outfit)/i.test(i.name));
+    if (!hasSleepwear) {
+      return `<div class="smart-alert"><div class="sa-text">No sleepwear or evening outfit added for tonight.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+    }
+  }
+
   return'';
 }
 
@@ -1558,7 +1561,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.date?`${DOW[day.date.getDay()]} ${fmt(day.date)} · `:''}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1612,38 +1615,36 @@ function openAddOutfit(dayId,slot){
 function setPackView(v){
   packView=v;
   document.querySelectorAll('.vpill').forEach((b,i)=>{
-    b.classList.toggle('on',['category','bag','purpose'][i]===v);});
-  const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group'};
+    b.classList.toggle('on',['day','bag','purpose'][i]===v);});
+  const labels={day:'',bag:'+ Bag',purpose:'+ Group'};
   const sa=document.getElementById('packSecAct');
-  sa.textContent=labels[v];sa.onclick=()=>openAddGroup(v);
+  sa.textContent=labels[v];
+  sa.onclick=v==='day'?null:()=>openAddGroup(v);
   Haptic.light();renderPack();
 }
 function renderPack(){
   const allText=days.map(d=>d.dayText+' '+d.nightText).join(' ').toLowerCase();
-  if(/snowboard|skiing/.test(allText)&&!CATS.find(c=>c.id==='snowgear')){
-    CATS.push({id:'snowgear',name:'Snow gear',type:'sup',desc:'Equipment for the mountain'});
+  if(/snowboard|skiing/.test(allText)&&!PURPOSES.find(p=>p.id==='snowgear')){
     PURPOSES.push({id:'snowgear',name:'Snow gear'});
-    catOrder.push('snowgear');purposeOrder.push('snowgear');
+    purposeOrder.push('snowgear');
     [['Snowboard / skis','trunk'],['Helmet','trunk'],['Boot bag','trunk'],['Poles','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'snowgear',b,'snowgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,[],[b],['snowgear'],false,'',true)));
   }
-  if(/camp|camping|tent/.test(allText)&&!CATS.find(c=>c.id==='campgear')){
-    CATS.push({id:'campgear',name:'Camping gear',type:'sup',desc:''});
+  if(/camp|camping|tent/.test(allText)&&!PURPOSES.find(p=>p.id==='campgear')){
     PURPOSES.push({id:'campgear',name:'Camping gear'});
-    catOrder.push('campgear');purposeOrder.push('campgear');
+    purposeOrder.push('campgear');
     [['Sleeping bag','trunk'],['Tent','trunk'],['Headlamp','backpack'],['Blanket','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,[],[b],['campgear'],false,'',true)));
   }
   let html='';
-  if(packView==='category') html=renderByCategory();
+  if(packView==='day') html=renderByDay();
   else if(packView==='bag') html=renderByBag();
   else html=renderByPurpose();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
   if(cgl)initDrag(cgl,newOrder=>{
-    if(packView==='category')catOrder=newOrder.filter(Boolean);
-    else if(packView==='bag')bagOrder=newOrder.filter(Boolean);
-    else purposeOrder=newOrder.filter(Boolean);
+    if(packView==='bag')bagOrder=newOrder.filter(Boolean);
+    else if(packView==='purpose')purposeOrder=newOrder.filter(Boolean);
   });
   document.querySelectorAll('.card-menu-btn').forEach(btn=>{
     btn.addEventListener('click',e=>{
@@ -1654,29 +1655,39 @@ function renderPack(){
   });
 }
 
-function renderByCategory(){
-  const ordered=catOrder.map(id=>CATS.find(c=>c.id===id)).filter(Boolean)
-    .concat(CATS.filter(c=>!catOrder.includes(c.id)));
-  let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
+function renderByDay(){
+  let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by the day you need it.</p>
     <div class="card-group-list" id="cardGroupList">`;
-  ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+
+  days.forEach(day=>{
+    const items=ITEMS.filter(i=>i.dayIds.includes(day.id));
     const done=items.filter(i=>i.checked).length;
-    const open=openCards.has('cat-'+cat.id);
-    h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
-      count:`${done}/${items.length}`,open,editType:'cat',
-      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
+    const open=openCards.has('day-'+day.id);
+    const label=day.date?`Day ${day.dayNum} · ${DOW[day.date.getDay()]} ${fmt(day.date)}`:`Day ${day.dayNum}`;
+    h+=packCard({id:'day-'+day.id,gid:day.id,name:label,sub:T.destinations[day.destIdx].name,
+      count:`${done}/${items.length}`,open,editType:'day',
+      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('day','${day.id}')">+ Add item</div>`});
   });
-  h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
+
+  // Unassigned items
+  const unassigned=ITEMS.filter(i=>!i.dayIds.length);
+  const done=unassigned.filter(i=>i.checked).length;
+  const open=openCards.has('day-unassigned');
+  h+=packCard({id:'day-unassigned',gid:'unassigned',name:'Any day / Always',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:'day',
+      body:unassigned.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('day','unassigned')">+ Add item</div>`});
+
+  h+=`</div>`;
   return h;
 }
+
 function renderByBag(){
   const ordered=bagOrder.map(id=>BAGS.find(b=>b.id===id)).filter(Boolean)
     .concat(BAGS.filter(b=>!bagOrder.includes(b.id)));
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1692,7 +1703,7 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1702,19 +1713,21 @@ function renderByPurpose(){
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
-function itemRow(item,showBag=false){
+function itemRow(item){
   const ck=item.checked;
-  return`<div class="list-row" data-item-id="${item.id}">
+  return`<div class="list-row" data-item-id="${item.id}" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${item.id}'); event.dataTransfer.dropEffect='move';">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
 function packCard({id,gid,name,sub,count,open,editType,body}){
-  return`<div class="card" id="crd-${id}" data-id="${id}">
+  return`<div class="card" id="crd-${id}" data-id="${id}"
+      ondragover="event.preventDefault(); this.classList.add('card-drag-over')"
+      ondragleave="this.classList.remove('card-drag-over')"
+      ondrop="handleItemDrop(event, '${editType}', '${gid}'); this.classList.remove('card-drag-over')">
     <div class="card-hd${open?' open':''}" onclick="togglePackCard('${id}')">
       <div class="card-hd-left">
         <div class="card-name">${esc(name)}</div>
@@ -1734,6 +1747,26 @@ function packCard({id,gid,name,sub,count,open,editType,body}){
     <div class="card-body${open?' open':''}">${body}</div>
   </div>`;
 }
+function handleItemDrop(e, targetType, targetId) {
+  e.preventDefault();
+  const itemId = e.dataTransfer.getData('text/plain');
+  if(!itemId) return;
+  const item = ITEMS.find(i=>i.id===itemId);
+  if(!item) return;
+
+  if (targetType === 'day') {
+    if (targetId === 'unassigned') item.dayIds = [];
+    else if (!item.dayIds.includes(targetId)) item.dayIds.push(targetId);
+  } else if (targetType === 'bag') {
+    if (!item.bagIds.includes(targetId)) item.bagIds.push(targetId);
+  } else if (targetType === 'purpose') {
+    if (!item.purposeIds.includes(targetId)) item.purposeIds.push(targetId);
+  }
+
+  Haptic.success();
+  renderPack();
+}
+
 function togglePackCard(id){
   openCards.has(id)?openCards.delete(id):openCards.add(id);Haptic.light();
   const card=document.getElementById('crd-'+id);
@@ -1759,8 +1792,13 @@ function toggleItem(itemId){
 }
 function openAddItem(viewType,groupId){
   aiCtx={type:'packitem',viewType,groupId};
-  const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
-    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+  let groupName='';
+  if(viewType==='day') {
+    if(groupId==='unassigned') groupName='Unassigned';
+    else { const d=days.find(x=>x.id===groupId); if(d) groupName='Day '+d.dayNum; }
+  } else if(viewType==='bag') groupName=BAGS.find(b=>b.id===groupId)?.name;
+  else groupName=PURPOSES.find(p=>p.id===groupId)?.name;
+
   document.getElementById('ai-title').textContent='Add item';
   document.getElementById('ai-sub').textContent=groupName||'';
   document.getElementById('ai-inp').value='';
@@ -1771,8 +1809,7 @@ function openAddItem(viewType,groupId){
 function openEditGroup(type,id){
   editCtx={type,id};
   let name='',desc='';
-  if(type==='cat'){const c=CATS.find(x=>x.id===id);name=c?.name||'';desc=c?.desc||'';}
-  else if(type==='bag'){const b=BAGS.find(x=>x.id===id);name=b?.name||'';desc=b?.desc||'';}
+  if(type==='bag'){const b=BAGS.find(x=>x.id===id);name=b?.name||'';desc=b?.desc||'';}
   else{const p=PURPOSES.find(x=>x.id===id);name=p?.name||'';}
   document.getElementById('edit-title').textContent='Edit';
   document.getElementById('edit-name').value=name;
@@ -1785,22 +1822,26 @@ function commitEdit(){
   if(!editCtx)return;
   const nm=document.getElementById('edit-name').value.trim();if(!nm)return;
   const dc=document.getElementById('edit-desc').value.trim();
-  if(editCtx.type==='cat'){const c=CATS.find(x=>x.id===editCtx.id);if(c){c.name=nm;c.desc=dc;}}
-  else if(editCtx.type==='bag'){const b=BAGS.find(x=>x.id===editCtx.id);if(b){b.name=nm;b.desc=dc;}}
+  if(editCtx.type==='bag'){const b=BAGS.find(x=>x.id===editCtx.id);if(b){b.name=nm;b.desc=dc;}}
   else{const p=PURPOSES.find(x=>x.id===editCtx.id);if(p)p.name=nm;}
   closeAll();Haptic.medium();renderPack();
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='bag'){
+    BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);
+    ITEMS.forEach(i=>{i.bagIds=i.bagIds.filter(bid=>bid!==id)});
+  }
+  else{
+    PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);
+    ITEMS.forEach(i=>{i.purposeIds=i.purposeIds.filter(pid=>pid!==id)});
+  }
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
   agCtx={type};
-  const labels={category:'New category',bag:'New bag or location',purpose:'New group'};
-  const subs={category:'e.g. Electronics, Documents',bag:'e.g. Tote bag, Car backseat',purpose:'e.g. Climbing gear, Food'};
+  const labels={bag:'New bag or location',purpose:'New group'};
+  const subs={bag:'e.g. Tote bag, Car backseat',purpose:'e.g. Climbing gear, Food'};
   document.getElementById('ag-title').textContent=labels[type]||'New group';
   document.getElementById('ag-sub').textContent=subs[type]||'';
   document.getElementById('ag-name').value='';
@@ -1811,10 +1852,9 @@ function commitGroup(){
   const nm=document.getElementById('ag-name').value.trim();if(!nm)return;
   const dc=document.getElementById('ag-desc').value.trim();
   const id='grp-'+Date.now();
-  if(agCtx?.type==='category'){CATS.push({id,name:nm,desc:dc,type:'custom'});catOrder.push(id);}
-  else if(agCtx?.type==='bag'){BAGS.push({id,name:nm,desc:dc});bagOrder.push(id);}
+  if(agCtx?.type==='bag'){BAGS.push({id,name:nm,desc:dc});bagOrder.push(id);}
   else{PURPOSES.push({id,name:nm});purposeOrder.push(id);}
-  openCards.add((agCtx?.type==='category'?'cat-':agCtx?.type==='bag'?'bag-':'pur-')+id);
+  openCards.add((agCtx?.type==='bag'?'bag-':'pur-')+id);
   closeAll();Haptic.medium();renderPack();
 }
 
@@ -1830,11 +1870,11 @@ function commitItem(){
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
   }else if(aiCtx.type==='packitem'){
-    let catId='health',bagId='main',purId='toiletry';
-    if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
-    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
-    else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    let dayIds=[],bagIds=[],purposeIds=[];
+    if(aiCtx.viewType==='day'){ if(aiCtx.groupId!=='unassigned')dayIds=[aiCtx.groupId]; bagIds=['main']; purposeIds=['toiletry']; }
+    else if(aiCtx.viewType==='bag'){bagIds=[aiCtx.groupId]; purposeIds=['toiletry']; }
+    else{purposeIds=[aiCtx.groupId]; bagIds=['main']; }
+    ITEMS.push(mkItem(nm,dayIds,bagIds,purposeIds,carry));
     closeAll();Haptic.medium();renderPack();
   }
 }

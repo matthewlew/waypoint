@@ -899,8 +899,19 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
-    carry,checked:false,auto,note};
+  return{
+    id:'item-'+(itemIdSeq++),
+    name,
+    categoryId:catId,
+    bagIds:[bagId].filter(Boolean),
+    purposeIds:[purId].filter(Boolean),
+    dayIds:[],
+    scenarios:[],
+    carry,
+    checked:false,
+    auto,
+    note
+  };
 }
 
 let CATS=[
@@ -986,9 +997,9 @@ function destRm(b){
 function go(){
   T.name=document.getElementById('sName').value.trim()||'My Trip';
   T.who=[...whoArr];
-  T.depDate=document.getElementById('sDepD').value;
+  T.depDate=document.getElementById('sDepD').value || null;
   T.depTime=document.getElementById('sDepT').value||'08:00';
-  T.retDate=document.getElementById('sRetD').value;
+  T.retDate=document.getElementById('sRetD').value || null;
   readDests('destList');
   initItems();
   catOrder=CATS.map(c=>c.id);
@@ -1132,10 +1143,12 @@ function renderBanners(){
   }
   if(T.destinations.length){
     const d0=T.destinations[0].name.toLowerCase();
-    if(/mammoth|tahoe|aspen|vail|park city/.test(d0))
-      h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Expect 15–30°F. Pack base layers, waterproof outer, gloves.</div>`;
-    else if(/hawaii|cancun|miami|bali|tulum/.test(d0))
-      h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Hot and humid. Light fabrics, SPF, one light layer for A/C.</div>`;
+    const allText=days.map(d=>d.dayText+' '+d.nightText).join(' ').toLowerCase();
+
+    if(/mammoth|tahoe|aspen|vail|park city|ski/.test(d0) || /ski|snowboard/.test(allText))
+      h+=`<div class="banner info"><strong>Cold weather detected:</strong> Expect cold temps. Pack base layers, waterproof outer, gloves.</div>`;
+    else if(/hawaii|cancun|miami|bali|tulum|beach/.test(d0) || /beach|swim/.test(allText))
+      h+=`<div class="banner info"><strong>Hot weather detected:</strong> Hot and humid. Light fabrics, SPF, one light layer for A/C.</div>`;
     else if(/london|paris|amsterdam|edinburgh/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Variable weather — layers and a compact rain jacket.</div>`;
   }
@@ -1149,7 +1162,12 @@ function buildDayCard(day){
   // Build any flight strips for detected codes
   const flightStrips=buildFlightStrips(day);
 
-  return`<div class="card${day.isTravel?' travel':''}" id="card-${day.id}">
+  const dayItems = ITEMS.filter(i => i.dayIds.includes(day.id));
+  const itemsHtml = dayItems.length ? `<div style="padding: 8px 14px 0; display:flex; gap:6px; flex-wrap:wrap">
+    ${dayItems.map(i => `<span class="odb-item${i.carry ? ' carry' : ''}">${esc(i.name)}</span>`).join('')}
+  </div>` : '';
+
+  return`<div class="card${day.isTravel?' travel':''}" id="card-${day.id}" ondragover="event.preventDefault()" ondrop="handleDrop(event, 'day', '${day.id}')">
     <div class="card-hd${isOpen?' open':''}" onclick="toggleCard('${day.id}')">
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
@@ -1163,6 +1181,7 @@ function buildDayCard(day){
         <span class="chevron${isOpen?' open':''}">▼</span>
       </div>
     </div>
+    ${itemsHtml}
     ${alert?`<div>${alert}</div>`:''}
     ${flightStrips}
     <div class="card-body${isOpen?' open':''}" id="body-${day.id}">
@@ -1188,10 +1207,28 @@ function buildDayCard(day){
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
+  let alertHtml = '';
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+    alertHtml += `<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
-  return'';
+
+  const dayItems = ITEMS.filter(i => i.dayIds.includes(day.id));
+  const hasSleepwear = dayItems.some(i => i.name.toLowerCase().includes('sleepwear') || i.name.toLowerCase().includes('pyjamas') || i.name.toLowerCase().includes('pajamas'));
+
+  if (!hasSleepwear && !day._dismissed.has('sleepwear')) {
+    alertHtml += `<div class="smart-alert"><div class="sa-text">No sleepwear added for this night.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+  }
+
+  if (day.nightText && day.nightText.trim().length > 0) {
+    const hasEveningWear = dayItems.some(i => i.scenarios.includes('night') || i.name.toLowerCase().includes('evening') || i.name.toLowerCase().includes('dress'));
+    if (!hasEveningWear && !day._dismissed.has('evening')) {
+      alertHtml += `<div class="smart-alert"><div class="sa-text">No evening outfit added.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','evening')">Skip</span></div>`;
+    }
+  }
+
+  return alertHtml;
 }
 
 // ─── FLIGHT STRIPS ───
@@ -1491,9 +1528,14 @@ function renderOutfits(){
   const wrap=document.getElementById('outfitContent');
   const perDay=days.map(day=>{
     const dest=T.destinations[day.destIdx];
-    const d=[...getOutfitFromText(day.dayText||'','day'),...(customOut[day.id+'day']||[])];
-    const n=[...getOutfitFromText(day.nightText||'','night'),...(customOut[day.id+'night']||[])];
-    return{day,dest,d,n};
+
+    // Combine text-suggested outfits with directly assigned ITEMS
+    const assignedItems = ITEMS.filter(i => i.dayIds.includes(day.id) && i.purposeIds.includes('clothing'));
+
+    const d=[...getOutfitFromText(day.dayText||'','day'),...(customOut[day.id+'day']||[]), ...assignedItems.filter(i => !i.scenarios.includes('night')).map(i => i.name)];
+    const n=[...getOutfitFromText(day.nightText||'','night'),...(customOut[day.id+'night']||[]), ...assignedItems.filter(i => i.scenarios.includes('night')).map(i => i.name)];
+
+    return{day,dest,d:[...new Set(d)],n:[...new Set(n)]};
   }).filter(x=>x.d.length||x.n.length);
 
   const slotMap=new Map();
@@ -1566,14 +1608,14 @@ function renderOutfits(){
           </div>
         </div>
         <div class="card-body${isOpen?' open':''}">
-          ${d.length?`<div class="slot-head">day</div><div style="margin-bottom:8px;line-height:2">
+          <div class="slot-head">day</div><div style="margin-bottom:8px;line-height:2">
             ${d.map(i=>`<span class="odb-item${CARRY_SET.has(i)?' carry':''}">${esc(i)}</span>`).join(' ')}
             <span class="odb-add" onclick="openAddOutfit('${day.id}','day')">+ item</span>
-          </div>`:''}
-          ${n.length?`<div class="slot-head" style="${d.length?'margin-top:10px':''}">evening</div><div style="line-height:2">
+          </div>
+          <div class="slot-head" style="margin-top:10px">evening</div><div style="line-height:2">
             ${n.map(i=>`<span class="odb-item${CARRY_SET.has(i)?' carry':''}">${esc(i)}</span>`).join(' ')}
             <span class="odb-add" onclick="openAddOutfit('${day.id}','night')">+ item</span>
-          </div>`:''}
+          </div>
         </div>
       </div>`;
     });
@@ -1634,11 +1676,42 @@ function renderPack(){
     [['Sleeping bag','trunk'],['Tent','trunk'],['Headlamp','backpack'],['Blanket','trunk']]
       .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
   }
+  const ROUTINES = {
+    'Morning Skincare': ['Cleanser', 'SPF 50', 'Moisturiser'],
+    'Night Routine': ['Cleanser', 'Makeup remover', 'Moisturiser'],
+    'Gym / Workout': ['Gym kit', 'Trainers', 'Reusable water bottles']
+  };
+
+  let routinesHtml = `<div class="card"><div class="card-hd"><div class="card-hd-left"><div class="card-name">Routines</div><div class="card-desc">Assign groups of items to all days</div></div></div><div class="card-body open">`;
+  Object.keys(ROUTINES).forEach(routineName => {
+    routinesHtml += `<button class="vpill" style="margin:4px" onclick="applyRoutine('${routineName}')">+ Add ${esc(routineName)}</button>`;
+  });
+  routinesHtml += `</div></div>`;
+
+  window.applyRoutine = (name) => {
+    const itemsToAssign = ROUTINES[name];
+    if (!itemsToAssign) return;
+    itemsToAssign.forEach(itemName => {
+      let item = ITEMS.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+      if (!item) {
+        item = mkItem(itemName, 'skincare', 'purse', 'toiletry');
+        ITEMS.push(item);
+      }
+      days.forEach(day => {
+        if (!item.dayIds.includes(day.id)) {
+          item.dayIds.push(day.id);
+        }
+      });
+    });
+    Haptic.success();
+    renderAll();
+  };
+
   let html='';
   if(packView==='category') html=renderByCategory();
   else if(packView==='bag') html=renderByBag();
   else html=renderByPurpose();
-  document.getElementById('packContent').innerHTML=html;
+  document.getElementById('packContent').innerHTML=routinesHtml + html;
   const cgl=document.getElementById('cardGroupList');
   if(cgl)initDrag(cgl,newOrder=>{
     if(packView==='category')catOrder=newOrder.filter(Boolean);
@@ -1676,7 +1749,7 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1692,7 +1765,7 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1704,7 +1777,7 @@ function renderByPurpose(){
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
-  return`<div class="list-row" data-item-id="${item.id}">
+  return`<div class="list-row" data-item-id="${item.id}" draggable="true" ondragstart="handleDragStart(event, '${item.id}')">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
@@ -1714,7 +1787,7 @@ function itemRow(item,showBag=false){
   </div>`;
 }
 function packCard({id,gid,name,sub,count,open,editType,body}){
-  return`<div class="card" id="crd-${id}" data-id="${id}">
+  return`<div class="card" id="crd-${id}" data-id="${id}" ondragover="event.preventDefault()" ondrop="handleDrop(event, '${editType}', '${gid}')">
     <div class="card-hd${open?' open':''}" onclick="togglePackCard('${id}')">
       <div class="card-hd-left">
         <div class="card-name">${esc(name)}</div>
@@ -1734,6 +1807,29 @@ function packCard({id,gid,name,sub,count,open,editType,body}){
     <div class="card-body${open?' open':''}">${body}</div>
   </div>`;
 }
+function handleDragStart(e, id) {
+  e.dataTransfer.setData('itemId', id);
+}
+
+function handleDrop(e, type, targetId) {
+  e.preventDefault();
+  const itemId = e.dataTransfer.getData('itemId');
+  const item = ITEMS.find(i => i.id === itemId);
+  if (!item) return;
+
+  if (type === 'day' && !item.dayIds.includes(targetId)) {
+    item.dayIds.push(targetId);
+  } else if (type === 'bag' && !item.bagIds.includes(targetId)) {
+    item.bagIds.push(targetId);
+  } else if (type === 'purpose' && !item.purposeIds.includes(targetId)) {
+    item.purposeIds.push(targetId);
+  } else if (type === 'cat') {
+    item.categoryId = targetId;
+  }
+  Haptic.success();
+  renderAll();
+}
+
 function togglePackCard(id){
   openCards.has(id)?openCards.delete(id):openCards.add(id);Haptic.light();
   const card=document.getElementById('crd-'+id);

@@ -668,6 +668,8 @@ body{
   </div>
 </div>
 
+<!-- TOAST -->
+<div class="tip" id="toast" style="font-size:14px;font-weight:500;text-align:center;padding:12px 16px;background:hsl(var(--primary));color:hsl(var(--primary-foreground));bottom:32px;top:auto;left:50%;transform:translateX(-50%);border-radius:20px;box-shadow:0 10px 30px rgba(0,0,0,0.15);"></div>
 <!-- TOOLTIP -->
 <div class="tip" id="tip">
   <div class="tip-name" id="tipName"></div>
@@ -770,6 +772,18 @@ const Haptic={
     o.start();o.stop(this._ctx.currentTime+ms/1000);
   }catch(e){}}
 };
+
+
+// ═══════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════
+function showToast(msg){
+  const t=document.getElementById('toast');
+  if(!t) return;
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>{t.classList.remove('show');}, 2000);
+}
 
 // ═══════════════════════════════════════
 //  ACTIVITY DATABASE
@@ -1069,11 +1083,11 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  const start=T.depDate?new Date(T.depDate+'T12:00:00'):null;
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
-      const date=new Date(start);date.setDate(start.getDate()+(n-1));
+      const date=start ? new Date(start) : null; if(date) date.setDate(start.getDate()+(n-1));
       const isFirst=n===1,isTransfer=d===dest.nights-1&&di<T.destinations.length-1;
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
@@ -1154,7 +1168,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.date ? DOW[day.date.getDay()] + ' ' + fmt(day.date) + ' ·' : ''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1191,6 +1205,11 @@ function buildAlert(day){
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  if(!/sleepwear|pyjama|pajama/.test(all)&&!day._dismissed.has('sleepwear'))
+    return`<div class="smart-alert"><div class="sa-text">No sleepwear added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+
   return'';
 }
 
@@ -1558,7 +1577,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.date ? DOW[day.date.getDay()] + ' ' + fmt(day.date) + ' ·' : ''} <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1828,6 +1847,7 @@ function commitItem(){
     const key=aiCtx.dayId+aiCtx.slot;
     if(!customOut[key])customOut[key]=[];
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
+    showToast('Saved to Closet');
     closeAll();Haptic.medium();renderOutfits();
   }else if(aiCtx.type==='packitem'){
     let catId='health',bagId='main',purId='toiletry';
@@ -1835,6 +1855,7 @@ function commitItem(){
     else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
     else{purId=aiCtx.groupId;}
     ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    showToast('Saved to Closet');
     closeAll();Haptic.medium();renderPack();
   }
 }

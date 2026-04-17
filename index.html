@@ -604,7 +604,7 @@ body{
     </div>
     <label class="sf-lbl">Departure</label>
     <div class="sf-row">
-      <input class="sf-inp" type="date" id="sDepD">
+      <input class="sf-inp" type="text" id="sDepD" placeholder="e.g. Next Friday">
       <input class="sf-inp sf-mini" type="time" id="sDepT">
     </div>
     <label class="sf-lbl">Destinations &amp; nights</label>
@@ -618,7 +618,7 @@ body{
     </div>
     <button class="add-dest-btn" onclick="destAdd('destList')">+ Add destination</button>
     <label class="sf-lbl" for="sRetD">Return date</label>
-    <input class="sf-inp" type="date" id="sRetD">
+    <input class="sf-inp" type="text" id="sRetD" placeholder="e.g. In 10 days">
     <button class="setup-cta" onclick="go()">Build trip →</button>
   </div>
 </div>
@@ -659,8 +659,7 @@ body{
         <div class="sec-act" id="packSecAct"></div>
       </div>
       <div class="view-pills">
-        <button class="vpill on" onclick="setPackView('category')">By category</button>
-        <button class="vpill"    onclick="setPackView('bag')">By bag</button>
+                <button class="vpill on"    onclick="setPackView('bag')">By bag</button>
         <button class="vpill"    onclick="setPackView('purpose')">By purpose</button>
       </div>
       <div class="pack-wrap" id="packContent"></div>
@@ -685,11 +684,11 @@ body{
       <input class="sh-inp" id="et-name" autocomplete="off">
       <span class="sh-lbl">Departure</span>
       <div class="sh-row">
-        <input class="sh-inp" type="date" id="et-depd">
+        <input class="sh-inp" type="text" id="et-depd">
         <input class="sh-inp sf-mini" type="time" id="et-dept">
       </div>
       <span class="sh-lbl">Return</span>
-      <input class="sh-inp" type="date" id="et-retd">
+      <input class="sh-inp" type="text" id="et-retd">
       <span class="sh-lbl">Destinations <span style="font-weight:400;font-size:12px">— drag to reorder</span></span>
       <div id="etDestList"></div>
       <button class="add-dest-btn" style="margin-top:4px" onclick="etDestAdd()">+ Destination</button>
@@ -734,6 +733,9 @@ body{
     </div>
   </div>
 </div>
+
+<!-- TOAST -->
+<div id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);opacity:0;transition:transform 0.3s ease, opacity 0.3s ease;background:hsl(var(--primary));color:hsl(var(--primary-foreground));padding:12px 24px;border-radius:30px;z-index:9999;font-weight:500;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,0.12);pointer-events:none;"></div>
 
 <!-- SHEET: Add group -->
 <div class="overlay" id="ovAG" onclick="if(event.target===this)closeAll()">
@@ -898,8 +900,8 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+function mkItem(name,bagId,purId,carry=false,note='',auto=false){
+  return{id:'item-'+(itemIdSeq++),name,bagIds:bagId?[bagId]:[],purposeIds:purId?[purId]:[],dayIds:[],
     carry,checked:false,auto,note};
 }
 
@@ -936,15 +938,15 @@ function initItems(){
     {cat:'makeup',  items:[['Foundation','main',false],['Mascara','main',false],['Lip product','purse',true],['Eyeshadow palette','main',false],['Makeup brushes','main',false],['Makeup remover','main',false]]},
     {cat:'health',  items:[['Prescription meds','purse',true],['Pain relief','purse',true],['Plasters','main',false],['Hand sanitiser','purse',true]]},
   ];
-  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,cat,b,'toiletry',c,'',true))));
+  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,b,'toiletry',c,'',true))));
   [['Instant noodles','trunk',false,''],['Snacks','backseat',false,'For the car'],
    ['Tupperware','trunk',false,'To eat with'],['Utensils','trunk',false,''],
    ['Reusable water bottles','backseat',false,'']
-  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,'food',b,'food',c,note,true)));
+  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,b,'food',c,note,true)));
   [['Passport / ID','purse',true],['Phone + charger','backpack',false],
    ['Power bank','purse',true],['Laptop + charger','backpack',false],
    ['Universal adapter','backpack',false],['Earbuds','backpack',false]
-  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,'tech',b,'tech',c,'',true)));
+  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,b,'tech',c,'',true)));
 }
 
 // ═══════════════════════════════════════
@@ -953,7 +955,7 @@ function initItems(){
 let T={name:'',who:[],depDate:'',depTime:'08:00',retDate:'',destinations:[]};
 let days=[];
 let openCards=new Set();
-let packView='category';
+let packView='bag';
 let outView='pack';
 let customOut={};
 let aiCtx=null,editCtx=null,agCtx=null;
@@ -1069,7 +1071,7 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  let start=new Date(T.depDate); if (isNaN(start.getTime())) start = new Date();
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
@@ -1188,10 +1190,20 @@ function buildDayCard(day){
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
-  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+  let alerts = '';
+
+  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim')) {
+    alerts += `<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
-  return'';
+  }
+
+  const hasNight = day.nightText.trim().length > 0;
+  if(hasNight && !/sleep|pyjama|pajama|routine/.test(all) && !day._dismissed.has('sleep')) {
+    alerts += `<div class="smart-alert"><div class="sa-text">No sleepwear added</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleep')">Skip</span></div>`;
+  }
+
+  return alerts;
 }
 
 // ─── FLIGHT STRIPS ───
@@ -1612,7 +1624,7 @@ function openAddOutfit(dayId,slot){
 function setPackView(v){
   packView=v;
   document.querySelectorAll('.vpill').forEach((b,i)=>{
-    b.classList.toggle('on',['category','bag','purpose'][i]===v);});
+    b.classList.toggle('on',['bag','purpose'][i]===v);});
   const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group'};
   const sa=document.getElementById('packSecAct');
   sa.textContent=labels[v];sa.onclick=()=>openAddGroup(v);
@@ -1625,18 +1637,17 @@ function renderPack(){
     PURPOSES.push({id:'snowgear',name:'Snow gear'});
     catOrder.push('snowgear');purposeOrder.push('snowgear');
     [['Snowboard / skis','trunk'],['Helmet','trunk'],['Boot bag','trunk'],['Poles','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'snowgear',b,'snowgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,b,'snowgear',false,'',true)));
   }
   if(/camp|camping|tent/.test(allText)&&!CATS.find(c=>c.id==='campgear')){
     CATS.push({id:'campgear',name:'Camping gear',type:'sup',desc:''});
     PURPOSES.push({id:'campgear',name:'Camping gear'});
     catOrder.push('campgear');purposeOrder.push('campgear');
     [['Sleeping bag','trunk'],['Tent','trunk'],['Headlamp','backpack'],['Blanket','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,b,'campgear',false,'',true)));
   }
   let html='';
-  if(packView==='category') html=renderByCategory();
-  else if(packView==='bag') html=renderByBag();
+  if(packView==='bag') html=renderByBag();
   else html=renderByPurpose();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
@@ -1652,31 +1663,17 @@ function renderPack(){
       btn.nextElementSibling?.classList.toggle('open');
     });
   });
+  initItemDrag();
 }
 
-function renderByCategory(){
-  const ordered=catOrder.map(id=>CATS.find(c=>c.id===id)).filter(Boolean)
-    .concat(CATS.filter(c=>!catOrder.includes(c.id)));
-  let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
-    <div class="card-group-list" id="cardGroupList">`;
-  ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
-    const done=items.filter(i=>i.checked).length;
-    const open=openCards.has('cat-'+cat.id);
-    h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
-      count:`${done}/${items.length}`,open,editType:'cat',
-      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
-  });
-  h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
-  return h;
-}
+
 function renderByBag(){
   const ordered=bagOrder.map(id=>BAGS.find(b=>b.id===id)).filter(Boolean)
     .concat(BAGS.filter(b=>!bagOrder.includes(b.id)));
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1692,7 +1689,7 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1709,7 +1706,7 @@ function itemRow(item,showBag=false){
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1830,11 +1827,10 @@ function commitItem(){
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
   }else if(aiCtx.type==='packitem'){
-    let catId='health',bagId='main',purId='toiletry';
-    if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
-    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
+    let bagId='main',purId='toiletry';
+    if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
     else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    ITEMS.push(mkItem(nm,bagId,purId,carry)); showToast('Saved to Closet');
     closeAll();Haptic.medium();renderPack();
   }
 }
@@ -1893,6 +1889,99 @@ function goNav(id){
   if(id==='pack'){setPackView(packView);}
   if(id==='outfits')renderOutfits();
 }
+
+function initItemDrag(){
+  const rows = [...document.querySelectorAll('.list-row')];
+  const dropZones = [...document.querySelectorAll('.card')];
+
+  let draggedItem = null;
+  let currentZone = null;
+
+  rows.forEach(row => {
+    if(row._dbItemDrag) return;
+    row._dbItemDrag = true;
+
+    // Create a drag handle just for moving items between categories
+    row.style.cursor = 'grab';
+    row.addEventListener('pointerdown', e => {
+      // Don't trigger if clicking the checkbox
+      if(e.target.closest('.cb')) return;
+      e.preventDefault();
+      draggedItem = row;
+      row.style.opacity = '0.4';
+      row.setPointerCapture(e.pointerId);
+      Haptic.light();
+    });
+
+    row.addEventListener('pointermove', e => {
+      if(!draggedItem) return;
+      e.preventDefault();
+
+      let foundZone = null;
+      dropZones.forEach(zone => {
+        const rect = zone.getBoundingClientRect();
+        if(e.clientY >= rect.top && e.clientY <= rect.bottom &&
+           e.clientX >= rect.left && e.clientX <= rect.right) {
+          foundZone = zone;
+        }
+      });
+
+      if(foundZone !== currentZone) {
+        if(currentZone) currentZone.style.outline = 'none';
+        currentZone = foundZone;
+        if(currentZone) {
+            currentZone.style.outline = '2px solid hsl(var(--primary))';
+            currentZone.style.borderRadius = 'var(--r)';
+        }
+        Haptic.light();
+      }
+    });
+
+    row.addEventListener('pointerup', e => {
+      if(!draggedItem) return;
+      row.style.opacity = '1';
+
+      if(currentZone) {
+        currentZone.style.outline = 'none';
+        const targetId = currentZone.dataset.id; // e.g. "bag-main" or "pur-food"
+        const itemId = draggedItem.dataset.itemId;
+        const item = ITEMS.find(i => i.id === itemId);
+
+        if(item && targetId) {
+          if(targetId.startsWith('bag-')) {
+            const bagId = targetId.substring(4);
+            if(!item.bagIds.includes(bagId)) item.bagIds.push(bagId);
+          } else if(targetId.startsWith('pur-')) {
+            const purId = targetId.substring(4);
+            if(!item.purposeIds.includes(purId)) item.purposeIds.push(purId);
+          }
+        }
+        Haptic.success();
+      }
+
+      draggedItem = null;
+      currentZone = null;
+      renderPack(); // Re-render to show item in new location
+    });
+  });
+}
+
+
+let toastTimer = null;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  if(!toast) return;
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  toast.style.transform = 'translateX(-50%) translateY(0)';
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(100px)';
+  }, 3000);
+}
+
 </script>
 </body>
 </html>

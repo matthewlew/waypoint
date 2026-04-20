@@ -116,6 +116,7 @@ body{
   background:hsl(var(--card));border:1px solid hsl(var(--border));
   border-radius:var(--rs);padding:0 14px;
   font-size:20px;color:hsl(var(--muted-foreground));cursor:pointer;
+  min-width: 44px; min-height: 44px;
 }
 
 .dest-list{display:flex;flex-direction:column;gap:6px}
@@ -133,7 +134,7 @@ body{
 }
 .dest-row .sf-inp{flex:1}
 .dest-rm{
-  width:32px;height:32px;border-radius:var(--rs);
+  width:44px;height:44px;border-radius:var(--rs);
   border:1px solid hsl(var(--border));background:none;
   color:hsl(var(--muted-foreground));font-size:16px;cursor:pointer;
   flex-shrink:0;display:flex;align-items:center;justify-content:center;
@@ -145,6 +146,7 @@ body{
   border:1px dashed hsl(var(--border));border-radius:var(--rs);
   background:none;font-family:'Inter',sans-serif;
   font-size:15px;color:hsl(var(--muted-foreground));cursor:pointer;
+  min-height: 44px;
 }
 .add-dest-btn:active{border-color:hsl(var(--primary));color:hsl(var(--primary))}
 
@@ -153,8 +155,11 @@ body{
   background:hsl(var(--primary));border:none;border-radius:var(--r);
   font-family:'Inter',sans-serif;font-size:16px;font-weight:600;
   color:hsl(var(--primary-foreground));cursor:pointer;letter-spacing:.01em;
+  min-height: 44px;
 }
-.setup-cta:hover{background:hsl(var(--primary)/.9)}
+@media (hover: hover) {
+  .setup-cta:hover{background:hsl(var(--primary)/.9)}
+}
 .setup-cta:active{background:hsl(var(--primary)/.8)}
 
 /* ══════════════════════════════
@@ -290,7 +295,7 @@ body{
 }
 /* edit dropdown */
 .card-menu-btn{
-  width:28px;height:28px;border-radius:var(--rsm);
+  width:44px;height:44px;border-radius:var(--rsm);
   border:none;background:none;color:hsl(var(--muted-foreground));
   font-size:18px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
@@ -308,8 +313,12 @@ body{
 .dd-item{
   padding:11px 14px;font-size:14px;color:hsl(var(--card-foreground));
   cursor:pointer;display:flex;align-items:center;gap:8px;
+  min-height: 44px;
 }
-.dd-item:hover,.dd-item:active{background:hsl(var(--muted))}
+@media (hover: hover) {
+  .dd-item:hover{background:hsl(var(--muted))}
+}
+.dd-item:active{background:hsl(var(--muted))}
 .dd-item.danger{color:#DC2626}
 .dd-item+.dd-item{border-top:1px solid hsl(var(--border))}
 
@@ -429,6 +438,7 @@ body{
   padding:9px 14px;background:none;
   border:1px dashed hsl(var(--border));border-radius:var(--rs);
   font-family:'Inter',sans-serif;font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;
+  min-height: 44px;
 }
 .add-day-btn:active{border-color:hsl(var(--primary));color:hsl(var(--primary))}
 
@@ -472,7 +482,7 @@ body{
   margin:0 3px 4px 0;
 }
 .odb-item.carry{color:hsl(var(--amb));background:hsl(var(--amb-bg))}
-.odb-add{display:inline;font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;padding:0 4px}
+.odb-add{display:inline-flex;align-items:center;font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;padding:0 4px;min-height:44px;}
 .odb-add:active{color:hsl(var(--primary))}
 
 /* ══════════════════════════════
@@ -512,13 +522,14 @@ body{
   width:5px;height:5px;border-radius:50%;
   background:hsl(var(--primary));flex-shrink:0;opacity:.5;
 }
-.row-add{font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;padding:9px 0}
+.row-add{font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;padding:9px 0;min-height: 44px;display:flex;align-items:center;}
 .row-add:active{color:hsl(var(--primary))}
 .add-card-btn{
   width:100%;margin-top:8px;padding:12px;
   border:1px dashed hsl(var(--border));border-radius:var(--r);
   background:none;font-family:'Inter',sans-serif;
   font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;text-align:center;
+  min-height: 44px;
 }
 .add-card-btn:active{border-color:hsl(var(--primary));color:hsl(var(--primary))}
 
@@ -571,17 +582,25 @@ body{
   width:100%;padding:14px;background:hsl(var(--primary));border:none;
   border-radius:var(--r);font-family:'Inter',sans-serif;
   font-size:16px;font-weight:600;color:hsl(var(--primary-foreground));cursor:pointer;margin-top:8px;
+  min-height: 44px;
 }
-.sh-cta:hover{background:hsl(var(--primary)/.9)}
+@media (hover: hover) {
+  .sh-cta:hover{background:hsl(var(--primary)/.9)}
+}
 .sh-cta:active{background:hsl(var(--primary)/.8)}
 .sh-cancel{
   width:100%;padding:10px;background:none;border:none;
   font-family:'Inter',sans-serif;font-size:15px;
   color:hsl(var(--muted-foreground));cursor:pointer;margin-top:4px;
+  min-height: 44px;
 }
-.sh-cancel:hover{background:hsl(var(--secondary));color:hsl(var(--secondary-foreground))}
+@media (hover: hover) {
+  .sh-cancel:hover{background:hsl(var(--secondary));color:hsl(var(--secondary-foreground))}
+}
 .sh-cta.danger{background:hsl(var(--destructive));color:hsl(var(--destructive-foreground))}
-.sh-cta.danger:hover{background:hsl(var(--destructive)/.9)}
+@media (hover: hover) {
+  .sh-cta.danger:hover{background:hsl(var(--destructive)/.9)}
+}
 </style>
 </head>
 <body>
@@ -898,9 +917,20 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
-    carry,checked:false,auto,note};
+function mkItem(name,catIds,bagIds,purIds,carry=false,note='',auto=false){
+  return{
+    id:'item-'+(itemIdSeq++),
+    name,
+    categoryIds: catIds ? (Array.isArray(catIds) ? catIds : [catIds]) : [],
+    bagIds: bagIds ? (Array.isArray(bagIds) ? bagIds : [bagIds]) : [],
+    purposeIds: purIds ? (Array.isArray(purIds) ? purIds : [purIds]) : [],
+    dayIds: [],
+    scenarios: [],
+    carry,
+    checked:false,
+    auto,
+    note
+  };
 }
 
 let CATS=[
@@ -936,15 +966,15 @@ function initItems(){
     {cat:'makeup',  items:[['Foundation','main',false],['Mascara','main',false],['Lip product','purse',true],['Eyeshadow palette','main',false],['Makeup brushes','main',false],['Makeup remover','main',false]]},
     {cat:'health',  items:[['Prescription meds','purse',true],['Pain relief','purse',true],['Plasters','main',false],['Hand sanitiser','purse',true]]},
   ];
-  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,cat,b,'toiletry',c,'',true))));
+  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,[cat],[b],['toiletry'],c,'',true))));
   [['Instant noodles','trunk',false,''],['Snacks','backseat',false,'For the car'],
    ['Tupperware','trunk',false,'To eat with'],['Utensils','trunk',false,''],
    ['Reusable water bottles','backseat',false,'']
-  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,'food',b,'food',c,note,true)));
+  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,['food'],[b],['food'],c,note,true)));
   [['Passport / ID','purse',true],['Phone + charger','backpack',false],
    ['Power bank','purse',true],['Laptop + charger','backpack',false],
    ['Universal adapter','backpack',false],['Earbuds','backpack',false]
-  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,'tech',b,'tech',c,'',true)));
+  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,['tech'],[b],['tech'],c,'',true)));
 }
 
 // ═══════════════════════════════════════
@@ -1069,11 +1099,14 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  const start=T.depDate?new Date(T.depDate+'T12:00:00'):null;
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
-      const date=new Date(start);date.setDate(start.getDate()+(n-1));
+      let date=null;
+      if(start){
+        date=new Date(start);date.setDate(start.getDate()+(n-1));
+      }
       const isFirst=n===1,isTransfer=d===dest.nights-1&&di<T.destinations.length-1;
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
@@ -1138,6 +1171,15 @@ function renderBanners(){
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Hot and humid. Light fabrics, SPF, one light layer for A/C.</div>`;
     else if(/london|paris|amsterdam|edinburgh/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Variable weather — layers and a compact rain jacket.</div>`;
+
+    // Additional weather-aware suggestions based on day activities
+    const allText = days.map(d => d.dayText + ' ' + d.nightText).join(' ').toLowerCase();
+    if (/cold|freezing|snow/.test(allText)) {
+        h += `<div class="banner info"><strong>Weather check:</strong> Cold weather expected. Suggest adding layering for cold mornings.</div>`;
+    }
+    if (/hot tub|swim/.test(allText)) {
+        h += `<div class="banner info"><strong>Activity check:</strong> Water activities planned. Suggest adding swimsuit and sandals.</div>`;
+    }
   }
   document.getElementById('banners').innerHTML=h;
 }
@@ -1154,7 +1196,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.date ? `${DOW[day.date.getDay()]} ${fmt(day.date)} · ` : ''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1191,6 +1233,26 @@ function buildAlert(day){
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  const nightActs = detectActs(day.nightText || '');
+  if(nightActs.length > 0 && !day._dismissed.has('evening_outfit')){
+      const hasEveningOutfit = ITEMS.some(i => i.purposeIds.includes('clothing') && (i.name.toLowerCase().includes('evening') || i.name.toLowerCase().includes('dress') || i.name.toLowerCase().includes('going-out')));
+      const customAdded = (customOut[day.id+'night'] || []).length > 0;
+      if (!hasEveningOutfit && !customAdded) {
+          return`<div class="smart-alert"><div class="sa-text">Evening activity planned, but no evening outfit added.</div>
+            <span class="sa-skip" onclick="dismiss('${day.id}','evening_outfit')">Skip</span></div>`;
+      }
+  }
+
+  if(!day._dismissed.has('sleepwear') && day.nightText){
+      const hasSleepwear = ITEMS.some(i => i.name.toLowerCase().includes('sleepwear') || i.name.toLowerCase().includes('pyjama') || i.name.toLowerCase().includes('pajama'));
+      const customAdded = (customOut[day.id+'night'] || []).some(n => n.toLowerCase().includes('sleepwear') || n.toLowerCase().includes('pyjama') || n.toLowerCase().includes('pajama'));
+      if(!hasSleepwear && !customAdded){
+          return`<div class="smart-alert"><div class="sa-text">No sleepwear added for tonight.</div>
+            <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+      }
+  }
+
   return'';
 }
 
@@ -1558,7 +1620,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.date ? `${DOW[day.date.getDay()]} ${fmt(day.date)} · ` : ''}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1625,14 +1687,14 @@ function renderPack(){
     PURPOSES.push({id:'snowgear',name:'Snow gear'});
     catOrder.push('snowgear');purposeOrder.push('snowgear');
     [['Snowboard / skis','trunk'],['Helmet','trunk'],['Boot bag','trunk'],['Poles','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'snowgear',b,'snowgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,['snowgear'],[b],['snowgear'],false,'',true)));
   }
   if(/camp|camping|tent/.test(allText)&&!CATS.find(c=>c.id==='campgear')){
     CATS.push({id:'campgear',name:'Camping gear',type:'sup',desc:''});
     PURPOSES.push({id:'campgear',name:'Camping gear'});
     catOrder.push('campgear');purposeOrder.push('campgear');
     [['Sleeping bag','trunk'],['Tent','trunk'],['Headlamp','backpack'],['Blanket','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,['campgear'],[b],['campgear'],false,'',true)));
   }
   let html='';
   if(packView==='category') html=renderByCategory();
@@ -1660,7 +1722,7 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
@@ -1676,7 +1738,7 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1692,7 +1754,7 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1704,12 +1766,13 @@ function renderByPurpose(){
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
+  const firstCat = item.categoryIds && item.categoryIds.length > 0 ? item.categoryIds[0] : null;
   return`<div class="list-row" data-item-id="${item.id}">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&firstCat?`<span class="from-lbl">${esc(CATS.find(c=>c.id===firstCat)?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1792,7 +1855,7 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>!i.categoryIds.includes(id));catOrder=catOrder.filter(x=>x!==id);}
   else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
   else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
@@ -1834,7 +1897,7 @@ function commitItem(){
     if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
     else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
     else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    ITEMS.push(mkItem(nm,[catId],[bagId],[purId],carry));
     closeAll();Haptic.medium();renderPack();
   }
 }

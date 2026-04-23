@@ -604,7 +604,7 @@ body{
     </div>
     <label class="sf-lbl">Departure</label>
     <div class="sf-row">
-      <input class="sf-inp" type="date" id="sDepD">
+      <input class="sf-inp" type="text" id="sDepD" placeholder="e.g. Next Friday">
       <input class="sf-inp sf-mini" type="time" id="sDepT">
     </div>
     <label class="sf-lbl">Destinations &amp; nights</label>
@@ -618,7 +618,7 @@ body{
     </div>
     <button class="add-dest-btn" onclick="destAdd('destList')">+ Add destination</button>
     <label class="sf-lbl" for="sRetD">Return date</label>
-    <input class="sf-inp" type="date" id="sRetD">
+    <input class="sf-inp" type="text" id="sRetD" placeholder="Optional">
     <button class="setup-cta" onclick="go()">Build trip →</button>
   </div>
 </div>
@@ -685,11 +685,11 @@ body{
       <input class="sh-inp" id="et-name" autocomplete="off">
       <span class="sh-lbl">Departure</span>
       <div class="sh-row">
-        <input class="sh-inp" type="date" id="et-depd">
+        <input class="sh-inp" type="text" id="et-depd">
         <input class="sh-inp sf-mini" type="time" id="et-dept">
       </div>
       <span class="sh-lbl">Return</span>
-      <input class="sh-inp" type="date" id="et-retd">
+      <input class="sh-inp" type="text" id="et-retd">
       <span class="sh-lbl">Destinations <span style="font-weight:400;font-size:12px">— drag to reorder</span></span>
       <div id="etDestList"></div>
       <button class="add-dest-btn" style="margin-top:4px" onclick="etDestAdd()">+ Destination</button>
@@ -899,7 +899,7 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+  return{id:'item-'+(itemIdSeq++),name,categoryIds:catId?[catId]:[],bagIds:bagId?[bagId]:[],purposeIds:purId?[purId]:[],dayIds:[],scenarios:[],
     carry,checked:false,auto,note};
 }
 
@@ -1069,11 +1069,17 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  let start = new Date();
+  let isDateValid = false;
+  if(T.depDate) {
+    const parsed = new Date(T.depDate+'T12:00:00');
+    if(!isNaN(parsed)) { start = parsed; isDateValid = true; }
+  }
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
       const date=new Date(start);date.setDate(start.getDate()+(n-1));
+      date._isValid = isDateValid;
       const isFirst=n===1,isTransfer=d===dest.nights-1&&di<T.destinations.length-1;
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
@@ -1154,7 +1160,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.date._isValid ? (DOW[day.date.getDay()] + ' ' + fmt(day.date)) : (day.dayNum === 1 && T.depDate ? esc(T.depDate) : 'Day ' + day.dayNum)} ·
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1171,6 +1177,13 @@ function buildDayCard(day){
         data-ph="What's happening? e.g. Snowboard, lunch out, explore…"
         spellcheck="false" autocorrect="off" autocapitalize="sentences"
       >${buildEdHTML(day.dayText||'')}</div>
+      <div class="slot-divider"></div>
+      ${(() => {
+        const dayItems = ITEMS.filter(i => i.dayIds.includes(day.id));
+        if (dayItems.length === 0) return '';
+        return `<div class="slot-head" style="margin-top:10px">day items</div>` + dayItems.map(i => itemRow(i, true)).join('');
+      })()}
+      <div class="row-add" style="padding-top:4px" onclick="openAddItem('day','${day.id}')">+ Add item</div>
       <div class="slot-divider"></div>
       <div class="slot-head">evening</div>
       <div class="slot-editor" id="ed-night-${day.id}" contenteditable="true"
@@ -1191,6 +1204,24 @@ function buildAlert(day){
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  if (day.dayNum === 1 && !day._dismissed.has('sleepwear')) {
+    const hasSleepwear = ITEMS.some(i => i.dayIds.includes(day.id) && i.name.toLowerCase().includes('sleepwear'));
+    if (!hasSleepwear) {
+      return `<div class="smart-alert"><div class="sa-text">No sleepwear added for Day 1.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+    }
+  }
+
+  const eveningActs = detectActs(day.nightText||'');
+  if (eveningActs.length > 0 && !day._dismissed.has('evening_outfit')) {
+    const hasOutfit = ITEMS.some(i => i.dayIds.includes(day.id) && i.name.toLowerCase().includes('outfit'));
+    if (!hasOutfit) {
+      return `<div class="smart-alert"><div class="sa-text">Evening plans detected but no outfit added.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','evening_outfit')">Skip</span></div>`;
+    }
+  }
+
   return'';
 }
 
@@ -1558,7 +1589,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.date._isValid ? (DOW[day.date.getDay()] + ' ' + fmt(day.date)) : (day.dayNum === 1 && T.depDate ? esc(T.depDate) : 'Day ' + day.dayNum)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1660,7 +1691,7 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
@@ -1676,7 +1707,7 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1692,7 +1723,7 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1709,7 +1740,7 @@ function itemRow(item,showBag=false){
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds&&item.categoryIds.length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryIds[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1760,7 +1791,8 @@ function toggleItem(itemId){
 function openAddItem(viewType,groupId){
   aiCtx={type:'packitem',viewType,groupId};
   const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
-    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:
+    viewType==='day'?('Day ' + days.find(d=>d.id===groupId)?.dayNum):PURPOSES.find(p=>p.id===groupId)?.name;
   document.getElementById('ai-title').textContent='Add item';
   document.getElementById('ai-sub').textContent=groupName||'';
   document.getElementById('ai-inp').value='';
@@ -1792,7 +1824,7 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS.forEach(i=>{i.categoryIds=i.categoryIds.filter(x=>x!==id)});catOrder=catOrder.filter(x=>x!==id);}
   else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
   else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
@@ -1833,9 +1865,23 @@ function commitItem(){
     let catId='health',bagId='main',purId='toiletry';
     if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
     else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
+    else if(aiCtx.viewType==='day'){catId=null; bagId=null; purId=null;}
     else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    const newItem = mkItem(nm,catId,bagId,purId,carry);
+    if(aiCtx.viewType==='day') newItem.dayIds.push(aiCtx.groupId);
+    ITEMS.push(newItem);
     closeAll();Haptic.medium();renderPack();
+    if(aiCtx.viewType==='day') renderDays();
+    const toast = document.createElement('div');
+    toast.textContent = "Saved to Closet";
+    toast.style.cssText = "position:fixed; bottom:20px; right:20px; background:hsl(var(--card)); color:hsl(var(--foreground)); border:1px solid hsl(var(--border)); padding:10px 16px; border-radius:8px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,0.1); font-size:14px; transition:opacity 0.3s; opacity:0; pointer-events:none;";
+    document.body.appendChild(toast);
+    requestAnimationFrame(() => toast.style.opacity = '1');
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
+
   }
 }
 

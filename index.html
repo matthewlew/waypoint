@@ -898,8 +898,12 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+function mkItem(name,catIds,bagIds,purIds,carry=false,note='',auto=false){
+  return{id:'item-'+(itemIdSeq++),name,
+    categoryIds:Array.isArray(catIds)?catIds:(catIds?[catIds]:[]),
+    bagIds:Array.isArray(bagIds)?bagIds:(bagIds?[bagIds]:[]),
+    purposeIds:Array.isArray(purIds)?purIds:(purIds?[purIds]:[]),
+    dayIds:[], activityIds:[], scenarios:[],
     carry,checked:false,auto,note};
 }
 
@@ -936,15 +940,15 @@ function initItems(){
     {cat:'makeup',  items:[['Foundation','main',false],['Mascara','main',false],['Lip product','purse',true],['Eyeshadow palette','main',false],['Makeup brushes','main',false],['Makeup remover','main',false]]},
     {cat:'health',  items:[['Prescription meds','purse',true],['Pain relief','purse',true],['Plasters','main',false],['Hand sanitiser','purse',true]]},
   ];
-  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,cat,b,'toiletry',c,'',true))));
+  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,[cat],[b],['toiletry'],c,'',true))));
   [['Instant noodles','trunk',false,''],['Snacks','backseat',false,'For the car'],
    ['Tupperware','trunk',false,'To eat with'],['Utensils','trunk',false,''],
    ['Reusable water bottles','backseat',false,'']
-  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,'food',b,'food',c,note,true)));
+  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,['food'],[b],['food'],c,note,true)));
   [['Passport / ID','purse',true],['Phone + charger','backpack',false],
    ['Power bank','purse',true],['Laptop + charger','backpack',false],
    ['Universal adapter','backpack',false],['Earbuds','backpack',false]
-  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,'tech',b,'tech',c,'',true)));
+  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,['tech'],[b],['tech'],c,'',true)));
 }
 
 // ═══════════════════════════════════════
@@ -959,6 +963,10 @@ let customOut={};
 let aiCtx=null,editCtx=null,agCtx=null;
 let whoArr=[];
 let catOrder,bagOrder,purposeOrder;
+let ROUTINES=[
+  {id:'rt-skin',name:'Morning Skincare',items:['Cleanser','Moisturiser','SPF 50']},
+  {id:'rt-night',name:'Evening Routine',items:['Makeup remover','Cleanser','Face mist']}
+];
 
 // ═══════════════════════════════════════
 //  SETUP
@@ -986,9 +994,9 @@ function destRm(b){
 function go(){
   T.name=document.getElementById('sName').value.trim()||'My Trip';
   T.who=[...whoArr];
-  T.depDate=document.getElementById('sDepD').value;
+  T.depDate=document.getElementById('sDepD').value||'';
   T.depTime=document.getElementById('sDepT').value||'08:00';
-  T.retDate=document.getElementById('sRetD').value;
+  T.retDate=document.getElementById('sRetD').value||'';
   readDests('destList');
   initItems();
   catOrder=CATS.map(c=>c.id);
@@ -1016,6 +1024,64 @@ function readDests(lid){
 // ═══════════════════════════════════════
 //  DRAG REORDER — generic pointer events
 // ═══════════════════════════════════════
+function initItemDrag(container){
+  if(!container)return;
+  let dragItem=null, dragRow=null, oi=null;
+  const allCards=()=>[...document.querySelectorAll('.card')];
+  container.querySelectorAll('.list-row').forEach(row=>{
+    const target=row;
+    if(target._db)return;target._db=true;
+    target.style.touchAction='none';
+    target.addEventListener('pointerdown',e=>{
+      if(e.target.closest('.cb'))return;
+      e.preventDefault();
+      dragRow=row;dragItem=row.dataset.itemId;
+      row.classList.add('dragging');
+      target.setPointerCapture(e.pointerId);Haptic.light();
+    });
+    target.addEventListener('pointermove',e=>{
+      if(!dragItem)return;e.preventDefault();
+      let no=null;
+      allCards().forEach(c=>{
+        const rc=c.getBoundingClientRect();
+        if(e.clientY>=rc.top&&e.clientY<=rc.bottom)no=c;
+      });
+      if(no!==null&&no!==oi){
+        if(oi!==null)oi.classList.remove('card-drag-over');
+        oi=no;
+        if(oi.id!==dragRow.closest('.card').id)oi.classList.add('card-drag-over');
+        Haptic.light();
+      }
+    });
+    target.addEventListener('pointerup',e=>{
+      if(!dragItem)return;
+      row.classList.remove('dragging');
+      if(oi!==null){
+        oi.classList.remove('card-drag-over');
+        if(oi.id!==dragRow.closest('.card').id){
+          const targetId=oi.dataset.id;
+          const item=ITEMS.find(x=>x.id===dragItem);
+          if(item&&targetId){
+            if(targetId.startsWith('cat-')){
+              const id=targetId.slice(4);
+              if(!item.categoryIds.includes(id))item.categoryIds.push(id);
+            }else if(targetId.startsWith('bag-')){
+              const id=targetId.slice(4);
+              if(!item.bagIds.includes(id))item.bagIds.push(id);
+            }else if(targetId.startsWith('pur-')){
+              const id=targetId.slice(4);
+              if(!item.purposeIds.includes(id))item.purposeIds.push(id);
+            }
+            Haptic.success();
+            renderPack();
+          }
+        }
+      }
+      dragItem=null;dragRow=null;oi=null;
+    });
+  });
+}
+
 function initDrag(container,onDone){
   if(!container)return;
   let di=null,oi=null;
@@ -1166,6 +1232,9 @@ function buildDayCard(day){
     ${alert?`<div>${alert}</div>`:''}
     ${flightStrips}
     <div class="card-body${isOpen?' open':''}" id="body-${day.id}">
+      <div style="margin-bottom:12px">
+        ${ITEMS.filter(i=>i.dayIds.includes(day.id)).map(i=>`<span class="odb-item">${esc(i.name)}</span>`).join(' ')}
+      </div>
       <div class="slot-head">day</div>
       <div class="slot-editor" id="ed-day-${day.id}" contenteditable="true"
         data-ph="What's happening? e.g. Snowboard, lunch out, explore…"
@@ -1182,16 +1251,34 @@ function buildDayCard(day){
         data-ph="Reminders, reservations, anything…"
         spellcheck="false" autocapitalize="sentences"
       >${esc(day.noteText||'')}</div>
+      <div style="margin-top:12px">
+        <span class="odb-add" onclick="openAddItem('day','${day.id}')">+ Add general item</span>
+      </div>
     </div>
   </div>`;
 }
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
-  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
-      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
-  return'';
+  let alerts = [];
+  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim')) {
+    alerts.push(`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`);
+  }
+
+  // Detect missing evening outfit if bar/dinner detected
+  if(/(bar|dinner|fancy|restaurant)/.test(all) && !/dressy|outfit|evening|night/i.test(all) && !day._dismissed.has('evening_outfit')) {
+    alerts.push(`<div class="smart-alert"><div class="sa-text">Evening activity detected. No evening outfit added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','evening_outfit')">Skip</span></div>`);
+  }
+
+  // Check if sleepwear is detected anywhere in the entire text (basic necessity)
+  if(!/(sleepwear|pyjamas|pajamas)/.test(all) && !day._dismissed.has('sleepwear')) {
+    alerts.push(`<div class="smart-alert"><div class="sa-text">No sleepwear detected for this day.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`);
+  }
+
+  return alerts.join('');
 }
 
 // ─── FLIGHT STRIPS ───
@@ -1527,7 +1614,7 @@ function renderOutfits(){
   </div>`;
 
   if(!slotMap.size){
-    wrap.innerHTML=toggle+`<div class="out-empty">Type activities in your day editors to see outfit suggestions.</div>`;
+    wrap.innerHTML=toggle+`<div class="out-empty">Type activities in your day editors to see outfit suggestions.</div>`+renderRoutines();
     return;
   }
 
@@ -1579,6 +1666,7 @@ function renderOutfits(){
     });
   }
 
+  html += renderRoutines();
   wrap.innerHTML=html;
 
   // Attach outfit tooltips
@@ -1606,6 +1694,44 @@ function openAddOutfit(dayId,slot){
   openOv('ovAI');setTimeout(()=>document.getElementById('ai-inp').focus(),280);
 }
 
+function renderRoutines(){
+  let h=`<div class="sec-hd" style="margin-top:20px"><div class="sec-title" style="font-size:16px">Routines</div></div>`;
+  ROUTINES.forEach(rt=>{
+    h+=`<div class="card">
+      <div class="card-hd">
+        <div class="card-name">${esc(rt.name)}</div>
+        <select id="sel-rt-${rt.id}" class="sf-inp" style="width:auto;padding:4px 8px;font-size:13px">
+          <option value="">Select day...</option>
+          ${days.map(d=>`<option value="${d.id}">Day ${d.dayNum}</option>`).join('')}
+        </select>
+        <button class="add-day-btn" style="width:auto;padding:4px 10px;margin:0;margin-left:6px" onclick="applyRoutine('${rt.id}')">Apply</button>
+      </div>
+      <div class="card-body open" style="padding-top:0">
+        <div style="line-height:2">
+          ${rt.items.map(i=>`<span class="odb-item">${esc(i)}</span>`).join(' ')}
+        </div>
+      </div>
+    </div>`;
+  });
+  return h;
+}
+function applyRoutine(rtId){
+  const rt=ROUTINES.find(r=>r.id===rtId);if(!rt)return;
+  const sel=document.getElementById('sel-rt-'+rt.id);
+  const dayId=sel?sel.value:null;
+  if(!dayId) return;
+
+  rt.items.forEach(nm=>{
+    const it=mkItem(nm,['toiletry'],['main'],['toiletry'],false,'from routine',true);
+    it.dayIds.push(dayId);
+    ITEMS.push(it);
+  });
+
+  showToast(`${rt.name} applied to Day!`);
+  Haptic.success();
+  renderAll();
+}
+
 // ═══════════════════════════════════════
 //  PACKING — unified three views
 // ═══════════════════════════════════════
@@ -1625,14 +1751,14 @@ function renderPack(){
     PURPOSES.push({id:'snowgear',name:'Snow gear'});
     catOrder.push('snowgear');purposeOrder.push('snowgear');
     [['Snowboard / skis','trunk'],['Helmet','trunk'],['Boot bag','trunk'],['Poles','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'snowgear',b,'snowgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,['snowgear'],[b],['snowgear'],false,'',true)));
   }
   if(/camp|camping|tent/.test(allText)&&!CATS.find(c=>c.id==='campgear')){
     CATS.push({id:'campgear',name:'Camping gear',type:'sup',desc:''});
     PURPOSES.push({id:'campgear',name:'Camping gear'});
     catOrder.push('campgear');purposeOrder.push('campgear');
     [['Sleeping bag','trunk'],['Tent','trunk'],['Headlamp','backpack'],['Blanket','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,['campgear'],[b],['campgear'],false,'',true)));
   }
   let html='';
   if(packView==='category') html=renderByCategory();
@@ -1640,11 +1766,15 @@ function renderPack(){
   else html=renderByPurpose();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
-  if(cgl)initDrag(cgl,newOrder=>{
-    if(packView==='category')catOrder=newOrder.filter(Boolean);
-    else if(packView==='bag')bagOrder=newOrder.filter(Boolean);
-    else purposeOrder=newOrder.filter(Boolean);
-  });
+  if(cgl){
+    initDrag(cgl,newOrder=>{
+      if(packView==='category')catOrder=newOrder.filter(Boolean);
+      else if(packView==='bag')bagOrder=newOrder.filter(Boolean);
+      else purposeOrder=newOrder.filter(Boolean);
+    });
+    // init drag for item rows too
+    document.querySelectorAll('.card-body').forEach(body=>initItemDrag(body));
+  }
   document.querySelectorAll('.card-menu-btn').forEach(btn=>{
     btn.addEventListener('click',e=>{
       e.stopPropagation();
@@ -1660,13 +1790,23 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+
+  const uncategorized=ITEMS.filter(i=>!i.categoryIds||i.categoryIds.length===0);
+  if(uncategorized.length>0){
+    const done=uncategorized.filter(i=>i.checked).length;
+    const open=openCards.has('cat-uncategorized');
+    h+=packCard({id:'cat-uncategorized',gid:'uncategorized',name:'Uncategorized',sub:'Items not in any category',
+      count:`${done}/${uncategorized.length}`,open,editType:'cat',
+      body:uncategorized.map(i=>itemRow(i)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1816,23 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+
+  const unbagged=ITEMS.filter(i=>!i.bagIds||i.bagIds.length===0);
+  if(unbagged.length>0){
+    const done=unbagged.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unbagged');
+    h+=packCard({id:'bag-unbagged',gid:'unbagged',name:'Unpacked',sub:'Items not in any bag',
+      count:`${done}/${unbagged.length}`,open,editType:'bag',
+      body:unbagged.map(i=>itemRow(i,true)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,13 +1842,23 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+
+  const unpurposed=ITEMS.filter(i=>!i.purposeIds||i.purposeIds.length===0);
+  if(unpurposed.length>0){
+    const done=unpurposed.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unpurposed');
+    h+=packCard({id:'pur-unpurposed',gid:'unpurposed',name:'Unassigned',sub:'Items with no specific purpose',
+      count:`${done}/${unpurposed.length}`,open,editType:'purpose',
+      body:unpurposed.map(i=>itemRow(i)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
@@ -1709,7 +1869,7 @@ function itemRow(item,showBag=false){
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds?.length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryIds[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1759,8 +1919,14 @@ function toggleItem(itemId){
 }
 function openAddItem(viewType,groupId){
   aiCtx={type:'packitem',viewType,groupId};
-  const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
-    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+  let groupName='';
+  if(viewType==='day'){
+    const d=days.find(x=>x.id===groupId);
+    groupName=d?`Day ${d.dayNum}`:'';
+  }else{
+    groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
+      viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+  }
   document.getElementById('ai-title').textContent='Add item';
   document.getElementById('ai-sub').textContent=groupName||'';
   document.getElementById('ai-inp').value='';
@@ -1792,9 +1958,9 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS.forEach(i=>{i.categoryIds=i.categoryIds.filter(x=>x!==id);});catOrder=catOrder.filter(x=>x!==id);}
+  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);ITEMS.forEach(i=>{i.bagIds=i.bagIds.filter(x=>x!==id);});bagOrder=bagOrder.filter(x=>x!==id);}
+  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);ITEMS.forEach(i=>{i.purposeIds=i.purposeIds.filter(x=>x!==id);});purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1821,6 +1987,30 @@ function commitGroup(){
 // ═══════════════════════════════════════
 //  COMMIT ITEM
 // ═══════════════════════════════════════
+function showToast(msg) {
+  let toast = document.getElementById('toast');
+  if(!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.style.position = 'fixed';
+    toast.style.bottom = '20px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.background = 'hsl(var(--foreground))';
+    toast.style.color = '#fff';
+    toast.style.padding = '10px 16px';
+    toast.style.borderRadius = '20px';
+    toast.style.fontSize = '14px';
+    toast.style.zIndex = '9999';
+    toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    toast.style.transition = 'opacity 0.3s';
+    document.body.appendChild(toast);
+  }
+  toast.innerText = msg;
+  toast.style.opacity = '1';
+  setTimeout(() => toast.style.opacity = '0', 2000);
+}
+
 function commitItem(){
   const nm=document.getElementById('ai-inp').value.trim();if(!nm||!aiCtx)return;
   const carry=document.getElementById('ai-carry').checked;
@@ -1830,13 +2020,21 @@ function commitItem(){
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
   }else if(aiCtx.type==='packitem'){
-    let catId='health',bagId='main',purId='toiletry';
-    if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
-    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
-    else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
-    closeAll();Haptic.medium();renderPack();
+    if(aiCtx.viewType==='day'){
+      const it=mkItem(nm,[],[],[],carry);
+      it.dayIds.push(aiCtx.groupId);
+      ITEMS.push(it);
+      closeAll();Haptic.medium();renderAll();
+    } else {
+      let catId='health',bagId='main',purId='toiletry';
+      if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
+      else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
+      else{purId=aiCtx.groupId;}
+      ITEMS.push(mkItem(nm,[catId],[bagId],[purId],carry));
+      closeAll();Haptic.medium();renderPack();
+    }
   }
+  showToast('Saved to Closet');
 }
 
 // ═══════════════════════════════════════

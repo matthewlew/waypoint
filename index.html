@@ -604,8 +604,8 @@ body{
     </div>
     <label class="sf-lbl">Departure</label>
     <div class="sf-row">
-      <input class="sf-inp" type="date" id="sDepD">
-      <input class="sf-inp sf-mini" type="time" id="sDepT">
+      <input class="sf-inp" type="text" id="sDepD" placeholder="e.g. Fri 12th">
+      <input class="sf-inp sf-mini" type="text" id="sDepT" placeholder="08:00">
     </div>
     <label class="sf-lbl">Destinations &amp; nights</label>
     <div class="dest-list" id="destList">
@@ -618,7 +618,7 @@ body{
     </div>
     <button class="add-dest-btn" onclick="destAdd('destList')">+ Add destination</button>
     <label class="sf-lbl" for="sRetD">Return date</label>
-    <input class="sf-inp" type="date" id="sRetD">
+    <input class="sf-inp" type="text" id="sRetD" placeholder="e.g. Mon 15th">
     <button class="setup-cta" onclick="go()">Build trip →</button>
   </div>
 </div>
@@ -685,11 +685,11 @@ body{
       <input class="sh-inp" id="et-name" autocomplete="off">
       <span class="sh-lbl">Departure</span>
       <div class="sh-row">
-        <input class="sh-inp" type="date" id="et-depd">
-        <input class="sh-inp sf-mini" type="time" id="et-dept">
+        <input class="sh-inp" type="text" id="et-depd" placeholder="e.g. Fri 12th">
+        <input class="sh-inp sf-mini" type="text" id="et-dept" placeholder="08:00">
       </div>
       <span class="sh-lbl">Return</span>
-      <input class="sh-inp" type="date" id="et-retd">
+      <input class="sh-inp" type="text" id="et-retd" placeholder="e.g. Mon 15th">
       <span class="sh-lbl">Destinations <span style="font-weight:400;font-size:12px">— drag to reorder</span></span>
       <div id="etDestList"></div>
       <button class="add-dest-btn" style="margin-top:4px" onclick="etDestAdd()">+ Destination</button>
@@ -899,7 +899,7 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+  return{id:'item-'+(itemIdSeq++),name,categoryIds:catId?[catId]:[],bagIds:bagId?[bagId]:[],purposeIds:purId?[purId]:[],dayIds:[],scenarios:[],
     carry,checked:false,auto,note};
 }
 
@@ -1016,6 +1016,67 @@ function readDests(lid){
 // ═══════════════════════════════════════
 //  DRAG REORDER — generic pointer events
 // ═══════════════════════════════════════
+function initItemDrag(container){
+  if(!container)return;
+  let draggedItem=null;
+  const rows=()=>[...container.querySelectorAll('.list-row')];
+  rows().forEach(row=>{
+    if(row._dbItem)return;row._dbItem=true;
+    row.style.touchAction='none';
+    row.addEventListener('pointerdown',e=>{
+      if(e.target.closest('.cb'))return;
+      e.preventDefault();draggedItem=row;
+      row.classList.add('card-dragging');
+      row.setPointerCapture(e.pointerId);Haptic.light();
+    });
+    row.addEventListener('pointermove',e=>{
+      if(!draggedItem)return;e.preventDefault();
+      const cards=[...container.querySelectorAll('.card')];
+      let hoverCard=null;
+      cards.forEach(c=>{
+        const rc=c.getBoundingClientRect();
+        if(e.clientY>=rc.top&&e.clientY<=rc.bottom)hoverCard=c;
+      });
+      cards.forEach(c=>c.classList.remove('card-drag-over'));
+      if(hoverCard)hoverCard.classList.add('card-drag-over');
+    });
+    row.addEventListener('pointerup',e=>{
+      if(!draggedItem)return;
+      const itemId=draggedItem.dataset.itemId;
+      draggedItem.classList.remove('card-dragging');
+      const cards=[...container.querySelectorAll('.card')];
+      let dropCard=null;
+      cards.forEach(c=>{
+        c.classList.remove('card-drag-over');
+        const rc=c.getBoundingClientRect();
+        if(e.clientY>=rc.top&&e.clientY<=rc.bottom)dropCard=c;
+      });
+      if(dropCard&&itemId){
+        const groupId=dropCard.dataset.id.split('-').slice(1).join('-'); // handles 'cat-xyz' -> 'xyz'
+        const item=ITEMS.find(i=>i.id===itemId);
+        if(item){
+          if(groupId==='unassigned'){
+             if(packView==='category')item.categoryIds=[];
+             else if(packView==='bag')item.bagIds=[];
+             else if(packView==='purpose')item.purposeIds=[];
+          }else{
+             if(packView==='category'){
+                 if(!item.categoryIds.includes(groupId))item.categoryIds.push(groupId);
+             }else if(packView==='bag'){
+                 if(!item.bagIds.includes(groupId))item.bagIds.push(groupId);
+             }else if(packView==='purpose'){
+                 if(!item.purposeIds.includes(groupId))item.purposeIds.push(groupId);
+             }
+          }
+          Haptic.success();
+          renderPack();
+        }
+      }
+      draggedItem=null;
+    });
+  });
+}
+
 function initDrag(container,onDone){
   if(!container)return;
   let di=null,oi=null;
@@ -1069,7 +1130,11 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  let start=new Date();
+  if(T.depDate){
+    const pd=new Date(T.depDate);
+    if(!isNaN(pd))start=new Date(T.depDate+'T12:00:00');
+  }
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
@@ -1091,8 +1156,8 @@ function buildDays(){
 
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function fmt(d){return(d.getMonth()+1)+'/'+d.getDate();}
-function fmtLong(d){return DOW[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();}
+function fmt(d){if(isNaN(d))return'';return(d.getMonth()+1)+'/'+d.getDate();}
+function fmtLong(d){if(isNaN(d))return'';return DOW[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ═══════════════════════════════════════
@@ -1154,7 +1219,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${isNaN(day.date)?'':DOW[day.date.getDay()]+' '+fmt(day.date)+' ·'}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1558,7 +1623,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${isNaN(day.date)?'':DOW[day.date.getDay()]+' '+fmt(day.date)+' · '}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1640,11 +1705,14 @@ function renderPack(){
   else html=renderByPurpose();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
-  if(cgl)initDrag(cgl,newOrder=>{
-    if(packView==='category')catOrder=newOrder.filter(Boolean);
-    else if(packView==='bag')bagOrder=newOrder.filter(Boolean);
-    else purposeOrder=newOrder.filter(Boolean);
-  });
+  if(cgl){
+    initDrag(cgl,newOrder=>{
+      if(packView==='category')catOrder=newOrder.filter(Boolean);
+      else if(packView==='bag')bagOrder=newOrder.filter(Boolean);
+      else purposeOrder=newOrder.filter(Boolean);
+    });
+    initItemDrag(cgl);
+  }
   document.querySelectorAll('.card-menu-btn').forEach(btn=>{
     btn.addEventListener('click',e=>{
       e.stopPropagation();
@@ -1660,13 +1728,23 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+
+  const unassigned=ITEMS.filter(i=>i.categoryIds.length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('cat-unassigned');
+    h+=packCard({id:'cat-unassigned',gid:'unassigned',name:'Unassigned',sub:'No category assigned',
+      count:`${done}/${unassigned.length}`,open,editType:'',
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1754,23 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+
+  const unassigned=ITEMS.filter(i=>i.bagIds.length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unpacked',sub:'Needs a location',
+      count:`${done}/${unassigned.length}`,open,editType:'',
+      body:unassigned.map(i=>itemRow(i,true)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,13 +1780,23 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+
+  const unassigned=ITEMS.filter(i=>i.purposeIds.length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Unassigned',sub:'General items',
+      count:`${done}/${unassigned.length}`,open,editType:'',
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
@@ -1709,7 +1807,7 @@ function itemRow(item,showBag=false){
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds.length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryIds[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1792,9 +1890,9 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS.forEach(i=>i.categoryIds=i.categoryIds.filter(x=>x!==id));catOrder=catOrder.filter(x=>x!==id);}
+  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);ITEMS.forEach(i=>i.bagIds=i.bagIds.filter(x=>x!==id));bagOrder=bagOrder.filter(x=>x!==id);}
+  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);ITEMS.forEach(i=>i.purposeIds=i.purposeIds.filter(x=>x!==id));purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){

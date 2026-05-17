@@ -604,21 +604,21 @@ body{
     </div>
     <label class="sf-lbl">Departure</label>
     <div class="sf-row">
-      <input class="sf-inp" type="date" id="sDepD">
-      <input class="sf-inp sf-mini" type="time" id="sDepT">
+      <input class="sf-inp" type="text" id="sDepD" placeholder="e.g. Tomorrow or 12/05" autocomplete="off">
+      <input class="sf-inp sf-mini" type="text" id="sDepT" placeholder="08:00">
     </div>
     <label class="sf-lbl">Destinations &amp; nights</label>
     <div class="dest-list" id="destList">
       <div class="dest-row">
         <span class="drag-handle">⠿</span>
         <input class="sf-inp" placeholder="e.g. Mammoth Lakes" autocomplete="off">
-        <input class="sf-inp sf-mini" type="number" min="1" placeholder="nts">
+        <input class="sf-inp sf-mini" type="text" placeholder="nts">
         <button class="dest-rm" onclick="destRm(this)">×</button>
       </div>
     </div>
     <button class="add-dest-btn" onclick="destAdd('destList')">+ Add destination</button>
     <label class="sf-lbl" for="sRetD">Return date</label>
-    <input class="sf-inp" type="date" id="sRetD">
+    <input class="sf-inp" type="text" id="sRetD" placeholder="e.g. Next week or 19/05" autocomplete="off">
     <button class="setup-cta" onclick="go()">Build trip →</button>
   </div>
 </div>
@@ -685,11 +685,11 @@ body{
       <input class="sh-inp" id="et-name" autocomplete="off">
       <span class="sh-lbl">Departure</span>
       <div class="sh-row">
-        <input class="sh-inp" type="date" id="et-depd">
-        <input class="sh-inp sf-mini" type="time" id="et-dept">
+        <input class="sh-inp" type="text" id="et-depd" placeholder="e.g. Tomorrow or 12/05" autocomplete="off">
+        <input class="sh-inp sf-mini" type="text" id="et-dept" placeholder="08:00">
       </div>
       <span class="sh-lbl">Return</span>
-      <input class="sh-inp" type="date" id="et-retd">
+      <input class="sh-inp" type="text" id="et-retd" placeholder="e.g. Next week or 19/05" autocomplete="off">
       <span class="sh-lbl">Destinations <span style="font-weight:400;font-size:12px">— drag to reorder</span></span>
       <div id="etDestList"></div>
       <button class="add-dest-btn" style="margin-top:4px" onclick="etDestAdd()">+ Destination</button>
@@ -898,8 +898,8 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+function mkItem(name,catIds=[],bagIds=[],purIds=[],dayIds=[],scenarios=[],carry=false,note='',auto=false){
+  return{id:'item-'+(itemIdSeq++),name,categoryIds:catIds,bagIds:bagIds,purposeIds:purIds,dayIds:dayIds,scenarios:scenarios,
     carry,checked:false,auto,note};
 }
 
@@ -936,15 +936,15 @@ function initItems(){
     {cat:'makeup',  items:[['Foundation','main',false],['Mascara','main',false],['Lip product','purse',true],['Eyeshadow palette','main',false],['Makeup brushes','main',false],['Makeup remover','main',false]]},
     {cat:'health',  items:[['Prescription meds','purse',true],['Pain relief','purse',true],['Plasters','main',false],['Hand sanitiser','purse',true]]},
   ];
-  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,cat,b,'toiletry',c,'',true))));
+  toi.forEach(({cat,items})=>items.forEach(([n,b,c])=>ITEMS.push(mkItem(n,[cat],[b],['toiletry'],[],[],c,'',true))));
   [['Instant noodles','trunk',false,''],['Snacks','backseat',false,'For the car'],
    ['Tupperware','trunk',false,'To eat with'],['Utensils','trunk',false,''],
    ['Reusable water bottles','backseat',false,'']
-  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,'food',b,'food',c,note,true)));
+  ].forEach(([n,b,c,note])=>ITEMS.push(mkItem(n,['food'],[b],['food'],[],[],c,note,true)));
   [['Passport / ID','purse',true],['Phone + charger','backpack',false],
    ['Power bank','purse',true],['Laptop + charger','backpack',false],
    ['Universal adapter','backpack',false],['Earbuds','backpack',false]
-  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,'tech',b,'tech',c,'',true)));
+  ].forEach(([n,b,c])=>ITEMS.push(mkItem(n,['tech'],[b],['tech'],[],[],c,'',true)));
 }
 
 // ═══════════════════════════════════════
@@ -1069,7 +1069,7 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  const start=T.depDate && !isNaN(Date.parse(T.depDate)) ? new Date(T.depDate+'T12:00:00') : new Date();
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
@@ -1091,8 +1091,8 @@ function buildDays(){
 
 const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function fmt(d){return(d.getMonth()+1)+'/'+d.getDate();}
-function fmtLong(d){return DOW[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate();}
+function fmt(d){return !isNaN(d) ? (d.getMonth()+1)+'/'+d.getDate() : '';}
+function fmtLong(d){return !isNaN(d) ? DOW[d.getDay()]+', '+MONTHS[d.getMonth()]+' '+d.getDate() : '';}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ═══════════════════════════════════════
@@ -1120,11 +1120,15 @@ function renderDays(){
   });
   document.getElementById('addDayWrap').innerHTML=T.destinations.map((dest,i)=>
     `<button class="add-day-btn" onclick="addDay(${i})">+ Day in ${esc(dest.name)}</button>`).join('');
+
+  days.forEach(d => {
+    initDrag(document.getElementById(`day-items-${d.id}`), () => {});
+  });
 }
 
 function renderBanners(){
   let h='';
-  if(T.depDate&&T.depTime){
+  if(T.depDate&&T.depTime&&!isNaN(Date.parse(T.depDate+'T'+T.depTime))){
     const dep=new Date(T.depDate+'T'+T.depTime),hr=(dep-Date.now())/3.6e6;
     if(hr>0&&hr<24) h+=`<div class="banner warn"><strong>Pack now</strong> — leaving in ${Math.round(hr)}h.</div>`;
     else if(hr>=24&&hr<48) h+=`<div class="banner warn"><strong>Pack tonight</strong> — departing tomorrow at ${T.depTime}.</div>`;
@@ -1154,7 +1158,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${!isNaN(day.date) ? DOW[day.date.getDay()] + ' ' + fmt(day.date) + ' ·' : ''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1182,16 +1186,36 @@ function buildDayCard(day){
         data-ph="Reminders, reservations, anything…"
         spellcheck="false" autocapitalize="sentences"
       >${esc(day.noteText||'')}</div>
+      <div class="slot-divider"></div>
+      <div class="slot-head" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>items</span>
+        <span class="odb-add" onclick="openAddItem('day', '${day.id}')" style="cursor:pointer; color:hsl(var(--primary)); text-transform:none;">+ Add item</span>
+      </div>
+      <div id="day-items-${day.id}" style="min-height: 20px; margin-bottom: 8px;">
+        ${ITEMS.filter(i => i.dayIds.includes(day.id)).map(i => itemRow(i)).join('')}
+      </div>
     </div>
   </div>`;
 }
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
+  let alerts = [];
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
-      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
-  return'';
+    alerts.push(`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`);
+
+  const hasSleepwear = ITEMS.some(i => i.dayIds.includes(day.id) && /sleepwear|pajama|pyjama/i.test(i.name)) || /sleepwear|pajama|pyjama/i.test(all);
+  if (!hasSleepwear && !day._dismissed.has('sleepwear') && !day.isTravel) {
+    alerts.push(`<div class="smart-alert"><div class="sa-text">No sleepwear added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`);
+  }
+
+  if (/(dinner|bar|club|fine dining|fancy)/.test(day.nightText.toLowerCase()) && !/outfit/i.test(day.nightText) && !day._dismissed.has('evening_outfit')) {
+     alerts.push(`<div class="smart-alert"><div class="sa-text">Evening activity detected — no evening outfit added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','evening_outfit')">Skip</span></div>`);
+  }
+  return alerts.join('');
 }
 
 // ─── FLIGHT STRIPS ───
@@ -1493,6 +1517,10 @@ function renderOutfits(){
     const dest=T.destinations[day.destIdx];
     const d=[...getOutfitFromText(day.dayText||'','day'),...(customOut[day.id+'day']||[])];
     const n=[...getOutfitFromText(day.nightText||'','night'),...(customOut[day.id+'night']||[])];
+    const assignedItems = ITEMS.filter(i => i.dayIds.includes(day.id)).map(i => i.name);
+    assignedItems.forEach(i => {
+      if (!d.includes(i) && !n.includes(i)) d.push(i);
+    });
     return{day,dest,d,n};
   }).filter(x=>x.d.length||x.n.length);
 
@@ -1558,7 +1586,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${!isNaN(day.date) ? DOW[day.date.getDay()] + ' ' + fmt(day.date) + ' · ' : ''}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1625,14 +1653,14 @@ function renderPack(){
     PURPOSES.push({id:'snowgear',name:'Snow gear'});
     catOrder.push('snowgear');purposeOrder.push('snowgear');
     [['Snowboard / skis','trunk'],['Helmet','trunk'],['Boot bag','trunk'],['Poles','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'snowgear',b,'snowgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,['snowgear'],[b],['snowgear'],[],[],false,'',true)));
   }
   if(/camp|camping|tent/.test(allText)&&!CATS.find(c=>c.id==='campgear')){
     CATS.push({id:'campgear',name:'Camping gear',type:'sup',desc:''});
     PURPOSES.push({id:'campgear',name:'Camping gear'});
     catOrder.push('campgear');purposeOrder.push('campgear');
     [['Sleeping bag','trunk'],['Tent','trunk'],['Headlamp','backpack'],['Blanket','trunk']]
-      .forEach(([n,b])=>ITEMS.push(mkItem(n,'campgear',b,'campgear',false,'',true)));
+      .forEach(([n,b])=>ITEMS.push(mkItem(n,['campgear'],[b],['campgear'],[],[],false,'',true)));
   }
   let html='';
   if(packView==='category') html=renderByCategory();
@@ -1660,13 +1688,21 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+  const uncatItems = ITEMS.filter(i => !i.categoryIds || i.categoryIds.length === 0);
+  if (uncatItems.length > 0) {
+    const done = uncatItems.filter(i => i.checked).length;
+    const open = openCards.has('cat-uncategorized');
+    h+=packCard({id:'cat-uncategorized',gid:'uncategorized',name:'Uncategorized',sub:'',
+      count:`${done}/${uncatItems.length}`,open,editType:'cat',
+      body:uncatItems.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','uncategorized')">+ Add item</div>`});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1712,21 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+  const unbaggedItems = ITEMS.filter(i => !i.bagIds || i.bagIds.length === 0);
+  if (unbaggedItems.length > 0) {
+    const done = unbaggedItems.filter(i => i.checked).length;
+    const open = openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unassigned',sub:'',
+      count:`${done}/${unbaggedItems.length}`,open,editType:'bag',
+      body:unbaggedItems.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('bag','unassigned')">+ Add item</div>`});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,13 +1736,21 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+  const unpurpItems = ITEMS.filter(i => !i.purposeIds || i.purposeIds.length === 0);
+  if (unpurpItems.length > 0) {
+    const done = unpurpItems.filter(i => i.checked).length;
+    const open = openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Unassigned',sub:'',
+      count:`${done}/${unpurpItems.length}`,open,editType:'purpose',
+      body:unpurpItems.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','unassigned')">+ Add item</div>`});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
@@ -1709,7 +1761,7 @@ function itemRow(item,showBag=false){
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds&&item.categoryIds.length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryIds[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1758,9 +1810,10 @@ function toggleItem(itemId){
   });
 }
 function openAddItem(viewType,groupId){
-  aiCtx={type:'packitem',viewType,groupId};
+  aiCtx={type: viewType === 'day' ? 'dayitem' : 'packitem', viewType, groupId};
   const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
-    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:
+    viewType==='day'?`Day ${days.find(d=>d.id===groupId)?.dayNum}`:PURPOSES.find(p=>p.id===groupId)?.name;
   document.getElementById('ai-title').textContent='Add item';
   document.getElementById('ai-sub').textContent=groupName||'';
   document.getElementById('ai-inp').value='';
@@ -1792,9 +1845,9 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS.forEach(i=>{i.categoryIds=i.categoryIds.filter(x=>x!==id);});catOrder=catOrder.filter(x=>x!==id);}
+  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);ITEMS.forEach(i=>{i.bagIds=i.bagIds.filter(x=>x!==id);});bagOrder=bagOrder.filter(x=>x!==id);}
+  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);ITEMS.forEach(i=>{i.purposeIds=i.purposeIds.filter(x=>x!==id);});purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1829,14 +1882,32 @@ function commitItem(){
     if(!customOut[key])customOut[key]=[];
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
-  }else if(aiCtx.type==='packitem'){
+  }else if(aiCtx.type==='packitem' || aiCtx.type==='dayitem'){
     let catId='health',bagId='main',purId='toiletry';
-    if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
-    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
-    else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
-    closeAll();Haptic.medium();renderPack();
+    let catIds=[], bagIds=[], purIds=[], dayIds=[];
+    if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech'; catIds.push(catId); purIds.push(purId); bagIds.push('main');}
+    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId; bagIds.push(bagId); catIds.push(catId); purIds.push(purId);}
+    else if(aiCtx.viewType==='day'){dayIds.push(aiCtx.groupId);}
+    else{purId=aiCtx.groupId; purIds.push(purId); catIds.push(catId); bagIds.push('main');}
+    ITEMS.push(mkItem(nm,catIds,bagIds,purIds,dayIds,[],carry));
+    closeAll();Haptic.medium();renderPack();renderDays();showToast('Saved to Closet');
   }
+}
+
+// ═══════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════
+function showToast(msg) {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:hsl(var(--foreground));color:hsl(var(--background));padding:10px 20px;border-radius:var(--rs);font-size:14px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:fadeIn 0.2s ease;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 2500);
 }
 
 // ═══════════════════════════════════════
@@ -1852,7 +1923,7 @@ function openEditTrip(){
     const row=document.createElement('div');row.className='et-dest-row';
     row.innerHTML=`<span class="et-handle">⠿</span>
       <input class="sh-inp" style="flex:1;margin-bottom:0" value="${esc(d.name)}" autocomplete="off">
-      <input class="sh-inp sf-mini" style="margin-bottom:0" type="number" min="1" value="${d.nights}">
+      <input class="sh-inp sf-mini" style="margin-bottom:0" type="text" value="${d.nights}">
       <button class="dest-rm" onclick="destRm(this)">×</button>`;
     dc.appendChild(row);
   });
@@ -1863,7 +1934,7 @@ function etDestAdd(){
   const row=document.createElement('div');row.className='et-dest-row';
   row.innerHTML=`<span class="et-handle">⠿</span>
     <input class="sh-inp" style="flex:1;margin-bottom:0" placeholder="Destination" autocomplete="off">
-    <input class="sh-inp sf-mini" style="margin-bottom:0" type="number" min="1" placeholder="nts">
+    <input class="sh-inp sf-mini" style="margin-bottom:0" type="text" placeholder="nts">
     <button class="dest-rm" onclick="destRm(this)">×</button>`;
   dc.appendChild(row);initDrag(dc);Haptic.light();
 }

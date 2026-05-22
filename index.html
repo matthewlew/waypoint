@@ -899,8 +899,7 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
-    carry,checked:false,auto,note};
+  return{id:'item-'+(itemIdSeq++),name,categoryIds:catId?[catId]:[],bagIds:bagId?[bagId]:[],purposeIds:purId?[purId]:[],dayIds:[],scenarios:[],carry,checked:false,auto,note};
 }
 
 let CATS=[
@@ -1006,8 +1005,8 @@ function readDests(lid){
   document.querySelectorAll(`#${lid} .dest-row,#${lid} .et-dest-row`).forEach((r,i)=>{
     const ins=r.querySelectorAll('input');
     T.destinations.push({
-      name:ins[0].value.trim()||'Destination '+(i+1),
-      nights:parseInt(ins[1]?.value)||3,
+      name:ins[0]?.value?.trim()||'Destination '+(i+1),
+      nights:parseInt(ins[1]?.value)||1,
       color:COLS[i%COLS.length],
     });
   });
@@ -1146,17 +1145,27 @@ function buildDayCard(day){
   const dest=T.destinations[day.destIdx];
   const isOpen=openCards.has(day.id);
   const alert=buildAlert(day);
-  // Build any flight strips for detected codes
   const flightStrips=buildFlightStrips(day);
+
+  let weatherHint = '';
+  const dName = dest.name.toLowerCase();
+  if (/mammoth|tahoe|aspen|vail|park city/.test(dName)) {
+    weatherHint = `<div class="card-desc" style="color:hsl(var(--primary)); margin-top: 4px;">🌤️ 25°F - Suggests: Layering for cold mornings, warm jacket.</div>`;
+  } else if (/hawaii|cancun|miami|bali|tulum/.test(dName)) {
+    weatherHint = `<div class="card-desc" style="color:hsl(var(--amb)); margin-top: 4px;">☀️ 85°F - Suggests: Light clothes, swimwear for hot tubs/beach.</div>`;
+  } else if (/london|paris|amsterdam|edinburgh/.test(dName)) {
+    weatherHint = `<div class="card-desc" style="color:hsl(var(--muted-foreground)); margin-top: 4px;">🌧️ 55°F - Suggests: Compact rain jacket, layers.</div>`;
+  }
 
   return`<div class="card${day.isTravel?' travel':''}" id="card-${day.id}">
     <div class="card-hd${isOpen?' open':''}" onclick="toggleCard('${day.id}')">
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
-        <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+        <div class="card-sub" style="flex-direction:column; align-items:flex-start;">
+          <div>${DOW[day.date.getDay()]} ${fmt(day.date)} ·
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
-          ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
+          ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}</div>
+          ${weatherHint}
         </div>
       </div>
       <div class="card-hd-right">
@@ -1187,11 +1196,34 @@ function buildDayCard(day){
 }
 
 function buildAlert(day){
-  const all=(day.dayText+' '+day.nightText).toLowerCase();
-  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
-    return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
-      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
-  return'';
+  let alerts = [];
+  const allText = (day.dayText + ' ' + day.nightText).toLowerCase();
+
+  if(/(hot tub|jacuzzi|pool|hot spring)/.test(allText) && !/swim|beach|swimwear/.test(allText) && !day._dismissed.has('swim')) {
+    alerts.push(`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`);
+  }
+
+  // Day-first completeness checks
+  const dayItems = ITEMS.filter(i => i.dayIds.includes(day.id));
+
+  if (day.nightText && !day._dismissed.has('evening_outfit')) {
+    const hasEvening = dayItems.some(i => i.name.toLowerCase().includes('evening') || i.name.toLowerCase().includes('dress') || i.name.toLowerCase().includes('nice outfit'));
+    if (!hasEvening) {
+      alerts.push(`<div class="smart-alert"><div class="sa-text">Evening activity planned but no evening outfit added.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','evening_outfit')">Skip</span></div>`);
+    }
+  }
+
+  if (!day._dismissed.has('sleepwear')) {
+    const hasSleepwear = dayItems.some(i => i.name.toLowerCase().includes('sleepwear') || i.name.toLowerCase().includes('pyjamas') || i.name.toLowerCase().includes('pajamas'));
+    if (!hasSleepwear) {
+      alerts.push(`<div class="smart-alert"><div class="sa-text">No sleepwear added for tonight.</div>
+        <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`);
+    }
+  }
+
+  return alerts.join('');
 }
 
 // ─── FLIGHT STRIPS ───
@@ -1619,6 +1651,7 @@ function setPackView(v){
   Haptic.light();renderPack();
 }
 function renderPack(){
+  setTimeout(initItemDrag, 50);
   const allText=days.map(d=>d.dayText+' '+d.nightText).join(' ').toLowerCase();
   if(/snowboard|skiing/.test(allText)&&!CATS.find(c=>c.id==='snowgear')){
     CATS.push({id:'snowgear',name:'Snow gear',type:'sup',desc:'Equipment for the mountain'});
@@ -1660,13 +1693,21 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+  const uncatItems=ITEMS.filter(i=>!i.categoryIds||i.categoryIds.length===0);
+  if(uncatItems.length){
+    const done=uncatItems.filter(i=>i.checked).length;
+    const open=openCards.has('cat-uncategorized');
+    h+=packCard({id:'cat-uncategorized',gid:'uncategorized',name:'Uncategorized',sub:'Items with no category',
+      count:`${done}/${uncatItems.length}`,open,editType:'cat',
+      body:uncatItems.map(i=>itemRow(i)).join('')});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1717,21 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+  const unbagItems=ITEMS.filter(i=>!i.bagIds||i.bagIds.length===0);
+  if(unbagItems.length){
+    const done=unbagItems.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unassigned Bags',sub:'Items not in any bag',
+      count:`${done}/${unbagItems.length}`,open,editType:'bag',
+      body:unbagItems.map(i=>itemRow(i)).join('')});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,13 +1741,21 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+  const unpurItems=ITEMS.filter(i=>!i.purposeIds||i.purposeIds.length===0);
+  if(unpurItems.length){
+    const done=unpurItems.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Unassigned Purposes',sub:'Items with no purpose',
+      count:`${done}/${unpurItems.length}`,open,editType:'purpose',
+      body:unpurItems.map(i=>itemRow(i)).join('')});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
@@ -1706,10 +1763,10 @@ function itemRow(item,showBag=false){
   const ck=item.checked;
   return`<div class="list-row" data-item-id="${item.id}">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
-    <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
+    <div class="item-txt${ck?' done':''}" style="cursor:pointer;" onclick="openEditItem('${item.id}')">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&item.categoryIds&&item.categoryIds.length?`<span class=\"from-lbl\">${esc(item.categoryIds.map(id=>CATS.find(c=>c.id===id)?.name).filter(Boolean).join(', '))}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1792,7 +1849,7 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>!i.categoryIds.includes(id));catOrder=catOrder.filter(x=>x!==id);}
   else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
   else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
@@ -1893,6 +1950,196 @@ function goNav(id){
   if(id==='pack'){setPackView(packView);}
   if(id==='outfits')renderOutfits();
 }
+
+// ═══════════════════════════════════════
+//  MULTI-CONTEXT ITEM EDIT
+// ═══════════════════════════════════════
+let editItemId = null;
+function openEditItem(itemId){
+  const item = ITEMS.find(i => i.id === itemId);
+  if(!item) return;
+  editItemId = itemId;
+  document.getElementById('ei-name').value = item.name;
+  document.getElementById('ei-carry').checked = item.carry;
+
+  // Render Days
+  let h = '';
+  days.forEach(d => {
+    const checked = item.dayIds.includes(d.id) ? 'checked' : '';
+    h += `<label style="display:flex;align-items:center;gap:4px;font-size:14px;background:hsl(var(--card));padding:4px 8px;border:1px solid hsl(var(--border));border-radius:4px;"><input type="checkbox" class="ei-day-cb" value="${d.id}" ${checked}> Day ${d.dayNum}</label>`;
+  });
+  document.getElementById('ei-days-wrap').innerHTML = h;
+
+  // Render Categories
+  h = '';
+  CATS.forEach(c => {
+    const checked = item.categoryIds.includes(c.id) ? 'checked' : '';
+    h += `<label style="display:flex;align-items:center;gap:4px;font-size:14px;background:hsl(var(--card));padding:4px 8px;border:1px solid hsl(var(--border));border-radius:4px;"><input type="checkbox" class="ei-cat-cb" value="${c.id}" ${checked}> ${esc(c.name)}</label>`;
+  });
+  document.getElementById('ei-cats-wrap').innerHTML = h;
+
+  // Render Bags
+  h = '';
+  BAGS.forEach(b => {
+    const checked = item.bagIds.includes(b.id) ? 'checked' : '';
+    h += `<label style="display:flex;align-items:center;gap:4px;font-size:14px;background:hsl(var(--card));padding:4px 8px;border:1px solid hsl(var(--border));border-radius:4px;"><input type="checkbox" class="ei-bag-cb" value="${b.id}" ${checked}> ${esc(b.name)}</label>`;
+  });
+  document.getElementById('ei-bags-wrap').innerHTML = h;
+
+  // Render Purposes
+  h = '';
+  PURPOSES.forEach(p => {
+    const checked = item.purposeIds.includes(p.id) ? 'checked' : '';
+    h += `<label style="display:flex;align-items:center;gap:4px;font-size:14px;background:hsl(var(--card));padding:4px 8px;border:1px solid hsl(var(--border));border-radius:4px;"><input type="checkbox" class="ei-pur-cb" value="${p.id}" ${checked}> ${esc(p.name)}</label>`;
+  });
+  document.getElementById('ei-purposes-wrap').innerHTML = h;
+
+  openOv('ovEditItem');
+}
+
+function commitEditItem(){
+  const item = ITEMS.find(i => i.id === editItemId);
+  if(!item) return;
+  item.name = document.getElementById('ei-name').value.trim() || item.name;
+  item.carry = document.getElementById('ei-carry').checked;
+
+  item.dayIds = Array.from(document.querySelectorAll('.ei-day-cb:checked')).map(cb => cb.value);
+  item.categoryIds = Array.from(document.querySelectorAll('.ei-cat-cb:checked')).map(cb => cb.value);
+  item.bagIds = Array.from(document.querySelectorAll('.ei-bag-cb:checked')).map(cb => cb.value);
+  item.purposeIds = Array.from(document.querySelectorAll('.ei-pur-cb:checked')).map(cb => cb.value);
+
+  closeAll();
+  Haptic.medium();
+  renderPack();
+  renderDays();
+}
+
+
+// ═══════════════════════════════════════
+//  ITEM DRAG AND DROP
+// ═══════════════════════════════════════
+function initItemDrag() {
+  document.querySelectorAll('.list-row').forEach(row => {
+    if(row._itemDb) return;
+    row._itemDb = true;
+
+    row.addEventListener('pointerdown', e => {
+      // Don't start drag if clicking checkbox or clicking to edit
+      if(e.target.closest('.cb') || e.target.closest('.item-txt')) return;
+
+      e.preventDefault();
+      row.classList.add('card-dragging');
+      row.setPointerCapture(e.pointerId);
+      Haptic.light();
+
+      const onMove = eMove => {
+        eMove.preventDefault();
+
+        // Find drop targets: day cards and pack cards
+        const dropTargets = Array.from(document.querySelectorAll('.card'));
+        let hoverTarget = null;
+
+        dropTargets.forEach(tgt => {
+          const rc = tgt.getBoundingClientRect();
+          if(eMove.clientX >= rc.left && eMove.clientX <= rc.right && eMove.clientY >= rc.top && eMove.clientY <= rc.bottom) {
+            hoverTarget = tgt;
+          }
+        });
+
+        document.querySelectorAll('.card-drag-over').forEach(el => el.classList.remove('card-drag-over'));
+
+        if (hoverTarget) {
+          hoverTarget.classList.add('card-drag-over');
+        }
+      };
+
+      const onUp = eUp => {
+        row.removeEventListener('pointermove', onMove);
+        row.removeEventListener('pointerup', onUp);
+        row.releasePointerCapture(eUp.pointerId);
+        row.classList.remove('card-dragging');
+
+        const target = document.querySelector('.card-drag-over');
+        if (target) {
+          target.classList.remove('card-drag-over');
+          const itemId = row.dataset.itemId;
+          const item = ITEMS.find(i => i.id === itemId);
+
+          if (item) {
+            const tgtId = target.id;
+            let updated = false;
+            if (tgtId.startsWith('card-d')) { // Day card
+              const dayId = tgtId.replace('card-', '');
+              if (!item.dayIds.includes(dayId)) {
+                item.dayIds.push(dayId);
+                updated = true;
+              }
+            } else if (tgtId.startsWith('crd-bag-')) { // Bag card
+              const bagId = tgtId.replace('crd-bag-', '');
+              if (bagId !== 'unassigned' && !item.bagIds.includes(bagId)) {
+                item.bagIds.push(bagId);
+                updated = true;
+              }
+            } else if (tgtId.startsWith('crd-cat-')) {
+               const catId = tgtId.replace('crd-cat-', '');
+               if(catId !== 'uncategorized' && !item.categoryIds.includes(catId)) {
+                  item.categoryIds.push(catId);
+                  updated = true;
+               }
+            } else if (tgtId.startsWith('crd-pur-')) {
+               const purId = tgtId.replace('crd-pur-', '');
+               if(purId !== 'unassigned' && !item.purposeIds.includes(purId)) {
+                  item.purposeIds.push(purId);
+                  updated = true;
+               }
+            }
+
+            if (updated) {
+              Haptic.success();
+              renderPack();
+              renderDays();
+            }
+          }
+        }
+      };
+
+      row.addEventListener('pointermove', onMove);
+      row.addEventListener('pointerup', onUp);
+    });
+  });
+}
+
 </script>
+
+<!-- SHEET: Edit item (multi-context) -->
+<div class="overlay" id="ovEditItem" onclick="if(event.target===this)closeAll()">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-body">
+      <div class="sheet-title">Edit Item</div>
+      <input class="sh-inp" id="ei-name" placeholder="Item name..." autocomplete="off">
+      <div class="carry-row" style="padding-bottom: 6px;">
+        <input type="checkbox" id="ei-carry">
+        <label for="ei-carry">Carry with me</label>
+      </div>
+
+      <span class="sh-lbl">Days</span>
+      <div id="ei-days-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Categories</span>
+      <div id="ei-cats-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Bags</span>
+      <div id="ei-bags-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Purposes</span>
+      <div id="ei-purposes-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+
+      <button class="sh-cta" onclick="commitEditItem()">Save Changes</button>
+      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

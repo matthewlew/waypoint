@@ -750,6 +750,36 @@ body{
   </div>
 </div>
 
+<!-- SHEET: Edit item (multi-context) -->
+<div class="overlay" id="ovEditItem" onclick="if(event.target===this)closeAll()">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-body">
+      <div class="sheet-title">Edit item</div>
+      <input class="sh-inp" id="ei-name" placeholder="Item name…" autocomplete="off">
+
+      <span class="sh-lbl">Assigned Days</span>
+      <div class="who-wrap" id="ei-days-wrap"></div>
+
+      <span class="sh-lbl">Categories</span>
+      <div class="who-wrap" id="ei-cats-wrap"></div>
+
+      <span class="sh-lbl">Bags / Locations</span>
+      <div class="who-wrap" id="ei-bags-wrap"></div>
+
+      <span class="sh-lbl">Purposes</span>
+      <div class="who-wrap" id="ei-purs-wrap"></div>
+
+      <div class="carry-row" id="ei-carry-row">
+        <input type="checkbox" id="ei-carry">
+        <label for="ei-carry">Carry with me (purse/backpack)</label>
+      </div>
+      <button class="sh-cta" onclick="saveItemEdits()">Save changes</button>
+      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -899,7 +929,11 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+  return{id:'item-'+(itemIdSeq++),name,
+    categoryIds:catId?[catId]:[],
+    bagIds:bagId?[bagId]:[],
+    purposeIds:purId?[purId]:[],
+    dayIds:[],
     carry,checked:false,auto,note};
 }
 
@@ -1069,7 +1103,8 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  const hasDates = !!T.depDate;
+  const start = hasDates ? new Date(T.depDate+'T12:00:00') : new Date();
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
@@ -1078,6 +1113,7 @@ function buildDays(){
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
       days.push({id,destIdx:di,dayNum:n,date,
+        hasDates,
         isTravel:isFirst||isTransfer||isLast,
         dayText:old.dayText||(isFirst||isTransfer?'Flight':''),
         nightText:old.nightText||'',noteText:old.noteText||'',
@@ -1154,7 +1190,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.hasDates ? `${DOW[day.date.getDay()]} ${fmt(day.date)} · ` : ''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1558,7 +1594,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.hasDates ? `${DOW[day.date.getDay()]} ${fmt(day.date)} · ` : ''}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1659,8 +1695,18 @@ function renderByCategory(){
     .concat(CATS.filter(c=>!catOrder.includes(c.id)));
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
+
+  const unassigned = ITEMS.filter(i=>i.categoryIds.length===0);
+  if(unassigned.length>0){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('cat-unassigned');
+    h+=packCard({id:'cat-unassigned',gid:'unassigned',name:'Uncategorized',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:'cat',
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>i.categoryIds.includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
@@ -1675,8 +1721,18 @@ function renderByBag(){
     .concat(BAGS.filter(b=>!bagOrder.includes(b.id)));
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
+
+  const unassigned = ITEMS.filter(i=>i.bagIds.length===0);
+  if(unassigned.length>0){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unassigned Bag',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:'bag',
+      body:unassigned.map(i=>itemRow(i,true)).join('')});
+  }
+
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>i.bagIds.includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
@@ -1691,8 +1747,18 @@ function renderByPurpose(){
     .concat(PURPOSES.filter(p=>!purposeOrder.includes(p.id)));
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
+
+  const unassigned = ITEMS.filter(i=>i.purposeIds.length===0);
+  if(unassigned.length>0){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Uncategorized Purpose',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:'purpose',
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>i.purposeIds.includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
@@ -1704,12 +1770,14 @@ function renderByPurpose(){
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
+  const firstCatId = item.categoryIds && item.categoryIds.length > 0 ? item.categoryIds[0] : null;
+  const firstCatName = firstCatId ? (CATS.find(c=>c.id===firstCatId)?.name||'') : '';
   return`<div class="list-row" data-item-id="${item.id}">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
-    <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
+    <div class="item-txt${ck?' done':''}" onclick="openEditItem('${item.id}')" style="cursor:pointer">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&firstCatName?`<span class="from-lbl">${esc(firstCatName)}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1756,6 +1824,53 @@ function toggleItem(itemId){
     const done=[...rows].filter(r=>r.querySelector('.cb.on')).length;
     el.textContent=`${done}/${rows.length}`;
   });
+}
+function openEditItem(itemId){
+  const item=ITEMS.find(i=>i.id===itemId);if(!item)return;
+  aiCtx={type:'edititem',itemId:itemId};
+  document.getElementById('ei-name').value=item.name;
+  document.getElementById('ei-carry').checked=item.carry;
+
+  const buildChips=(wrapId,allOpts,selectedIds)=>{
+    const wrap=document.getElementById(wrapId);
+    wrap.innerHTML=allOpts.map(opt=>{
+      const isSel=selectedIds.includes(opt.id);
+      return `<div class="who-chip" style="cursor:pointer;${isSel?'background:hsl(var(--foreground));color:hsl(var(--background))':''}"
+                   onclick="toggleEiChip(this, '${opt.id}', '${wrapId}')">${esc(opt.name)}</div>`;
+    }).join('');
+    wrap.dataset.selected=JSON.stringify(selectedIds);
+  };
+
+  const allDays=days.map(d=>({id:d.id,name:'Day '+d.dayNum}));
+  buildChips('ei-days-wrap',allDays,item.dayIds);
+  buildChips('ei-cats-wrap',CATS,item.categoryIds);
+  buildChips('ei-bags-wrap',BAGS,item.bagIds);
+  buildChips('ei-purs-wrap',PURPOSES,item.purposeIds);
+
+  openOv('ovEditItem');setTimeout(()=>document.getElementById('ei-name').focus(),280);
+}
+function toggleEiChip(el, optId, wrapId){
+  const wrap=document.getElementById(wrapId);
+  let sel=JSON.parse(wrap.dataset.selected);
+  if(sel.includes(optId)){
+    sel=sel.filter(id=>id!==optId);
+    el.style.background='';el.style.color='';
+  }else{
+    sel.push(optId);
+    el.style.background='hsl(var(--foreground))';el.style.color='hsl(var(--background))';
+  }
+  wrap.dataset.selected=JSON.stringify(sel);
+}
+function saveItemEdits(){
+  if(!aiCtx||aiCtx.type!=='edititem')return;
+  const item=ITEMS.find(i=>i.id===aiCtx.itemId);if(!item)return;
+  item.name=document.getElementById('ei-name').value.trim()||item.name;
+  item.carry=document.getElementById('ei-carry').checked;
+  item.dayIds=JSON.parse(document.getElementById('ei-days-wrap').dataset.selected);
+  item.categoryIds=JSON.parse(document.getElementById('ei-cats-wrap').dataset.selected);
+  item.bagIds=JSON.parse(document.getElementById('ei-bags-wrap').dataset.selected);
+  item.purposeIds=JSON.parse(document.getElementById('ei-purs-wrap').dataset.selected);
+  closeAll();Haptic.medium();renderPack();
 }
 function openAddItem(viewType,groupId){
   aiCtx={type:'packitem',viewType,groupId};

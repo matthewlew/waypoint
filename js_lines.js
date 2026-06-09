@@ -1,793 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Waypoint</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-/* ── TOKENS ─────────────────────────────────────
-   shadcn/ui variables (Zinc palette)
-──────────────────────────────────────────────── */
-:root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 10% 3.9%;
-  --radius: 0.5rem;
 
-  /* Additional colors for specialized usage keeping original intent but adjusting to HSL */
-  --rose: 329 46% 42%;     /* #9F3A6E */
-  --rose-bg: 329 100% 97%; /* #FDF2F8 */
-  --rose-mid: 323 60% 84%; /* #F0BEDD */
-
-  --amb: 37 83% 31%;       /* #92400E */
-  --amb-bg: 44 100% 95%;   /* #FFFBEB */
-
-  --grn: 142 64% 24%;      /* #166534 */
-  --grn-bg: 152 76% 96%;   /* #ECFDF5 */
-
-  --flt: 263 70% 50%;      /* #6D28D9 */
-  --flt-bg: 250 100% 98%;  /* #F5F3FF */
-
-  --r: calc(var(--radius) + 4px);
-  --rs: var(--radius);
-  --rsm: calc(var(--radius) - 2px);
-}
-
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:16px;-webkit-text-size-adjust:100%;height:100%}
-body{
-  font-family:'Inter',system-ui,sans-serif;
-  background:hsl(var(--background));color:hsl(var(--foreground));
-  height:100%;overflow:hidden;
-  overscroll-behavior:none;
-  -webkit-tap-highlight-color:transparent;
-  touch-action:pan-y;
-}
-.scr{overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
-.scr::-webkit-scrollbar{display:none}
-
-/* ══════════════════════════════
-   SETUP
-══════════════════════════════ */
-.setup{position:fixed;inset:0;background:hsl(var(--background));z-index:500;
-  overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:80px}
-.setup::-webkit-scrollbar{display:none}
-.setup.gone{display:none}
-
-.setup-top{
-  padding:52px 24px 32px;
-  background:hsl(var(--card));
-  border-bottom:1px solid hsl(var(--border));
-}
-.logo{
-  font-size:30px;font-weight:700;color:hsl(var(--foreground));
-  letter-spacing:-.5px;line-height:1;
-}
-.logo span{color:hsl(var(--primary))}
-.logo-sub{font-size:15px;color:hsl(var(--muted-foreground));margin-top:6px;font-weight:400}
-
-.sf{padding:0 20px}
-.sf-lbl{
-  display:block;font-size:13px;font-weight:500;
-  color:hsl(var(--muted-foreground));margin:20px 0 7px;
-}
-.sf-inp{
-  width:100%;background:hsl(var(--card));
-  border:1px solid hsl(var(--border));border-radius:var(--rs);
-  padding:12px 14px;font-family:'Inter',sans-serif;
-  font-size:16px;color:hsl(var(--foreground));outline:none;
-  transition:border-color .15s,box-shadow .15s;
-}
-.sf-inp::placeholder{color:hsl(var(--muted-foreground))}
-.sf-inp:focus{border-color:hsl(var(--ring));box-shadow:0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))}
-.sf-row{display:flex;gap:8px}
-.sf-row .sf-inp{flex:1}
-.sf-mini{width:76px;flex-shrink:0;text-align:center}
-
-.who-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
-.who-chip{
-  display:inline-flex;align-items:center;gap:5px;
-  background:hsl(var(--card));border:1px solid hsl(var(--border));
-  border-radius:20px;padding:5px 12px;
-  font-size:14px;color:hsl(var(--card-foreground));
-}
-.who-x{color:hsl(var(--muted-foreground));cursor:pointer;font-size:15px;line-height:1}
-.who-row{display:flex;gap:8px}
-.who-row .sf-inp{flex:1}
-.who-add-btn{
-  background:hsl(var(--card));border:1px solid hsl(var(--border));
-  border-radius:var(--rs);padding:0 14px;
-  font-size:20px;color:hsl(var(--muted-foreground));cursor:pointer;
-}
-
-.dest-list{display:flex;flex-direction:column;gap:6px}
-.dest-row,.et-dest-row{
-  display:flex;align-items:center;gap:7px;
-  touch-action:none;transition:opacity .15s;
-}
-.dest-row.dragging,.et-dest-row.dragging{opacity:.35}
-.dest-row.drag-over,.et-dest-row.drag-over{
-  outline:2px solid hsl(var(--primary));border-radius:var(--rs);
-}
-.drag-handle,.et-handle{
-  color:hsl(var(--muted-foreground));cursor:grab;font-size:17px;
-  padding:8px 4px;flex-shrink:0;user-select:none;touch-action:none;
-}
-.dest-row .sf-inp{flex:1}
-.dest-rm{
-  width:32px;height:32px;border-radius:var(--rs);
-  border:1px solid hsl(var(--border));background:none;
-  color:hsl(var(--muted-foreground));font-size:16px;cursor:pointer;
-  flex-shrink:0;display:flex;align-items:center;justify-content:center;
-}
-.dest-rm:active{border-color:#DC2626;color:#DC2626}
-
-.add-dest-btn{
-  width:100%;margin-top:6px;padding:11px;
-  border:1px dashed hsl(var(--border));border-radius:var(--rs);
-  background:none;font-family:'Inter',sans-serif;
-  font-size:15px;color:hsl(var(--muted-foreground));cursor:pointer;
-}
-.add-dest-btn:active{border-color:hsl(var(--primary));color:hsl(var(--primary))}
-
-.setup-cta{
-  width:100%;margin-top:28px;padding:15px;
-  background:hsl(var(--primary));border:none;border-radius:var(--r);
-  font-family:'Inter',sans-serif;font-size:16px;font-weight:600;
-  color:hsl(var(--primary-foreground));cursor:pointer;letter-spacing:.01em;
-}
-.setup-cta:hover{background:hsl(var(--primary)/.9)}
-.setup-cta:active{background:hsl(var(--primary)/.8)}
-
-/* ══════════════════════════════
-   APP SHELL
-══════════════════════════════ */
-.app{height:100%;display:flex;flex-direction:column;overflow:hidden;background:hsl(var(--background))}
-
-.hdr{
-  flex-shrink:0;background:hsl(var(--card));
-  border-bottom:1px solid hsl(var(--border));
-  padding:13px 16px 11px;
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-}
-.hdr-left{flex:1;min-width:0}
-.hdr-trip{
-  font-size:18px;font-weight:700;color:hsl(var(--foreground));
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;
-}
-.hdr-meta{
-  font-size:13px;color:hsl(var(--muted-foreground));margin-top:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.hdr-edit{font-size:14px;font-weight:500;color:hsl(var(--primary));cursor:pointer;flex-shrink:0}
-
-.nav{
-  flex-shrink:0;background:hsl(var(--card));
-  border-bottom:1px solid hsl(var(--border));
-  display:flex;overflow-x:auto;overflow-y:hidden;
-  -webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;
-}
-.nav::-webkit-scrollbar{display:none}
-.nav-btn{
-  flex-shrink:0;padding:10px 18px;
-  font-family:'Inter',sans-serif;font-size:14px;font-weight:500;
-  color:hsl(var(--muted-foreground));border:none;background:none;
-  border-bottom:2.5px solid transparent;cursor:pointer;
-  white-space:nowrap;transition:color .12s;
-}
-.nav-btn.on{color:hsl(var(--foreground));border-bottom-color:hsl(var(--foreground))}
-
-.main-scr{
-  flex:1;overflow-y:auto;overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;
-  background:hsl(var(--background));
-}
-.main-scr::-webkit-scrollbar{display:none}
-
-.sec{display:none;padding-bottom:100px}
-.sec.on{display:block}
-.sec-hd{
-  padding:16px 16px 4px;
-  display:flex;align-items:center;justify-content:space-between;
-}
-.sec-title{font-size:20px;font-weight:700;color:hsl(var(--foreground))}
-.sec-act{font-size:14px;color:hsl(var(--primary));cursor:pointer;font-weight:500}
-
-/* view pills */
-.view-pills{
-  display:flex;gap:6px;padding:10px 14px 0;
-  overflow-x:auto;scrollbar-width:none;
-}
-.view-pills::-webkit-scrollbar{display:none}
-.vpill{
-  flex-shrink:0;padding:6px 14px;border-radius:20px;
-  font-size:13px;font-weight:500;
-  border:1px solid hsl(var(--border));background:hsl(var(--card));
-  color:hsl(var(--muted-foreground));cursor:pointer;font-family:'Inter',sans-serif;
-  transition:all .12s;
-}
-.vpill.on{background:hsl(var(--foreground));border-color:hsl(var(--foreground));color:#fff}
-
-/* ══════════════════════════════
-   UNIFIED CARD
-══════════════════════════════ */
-.card{
-  margin:8px 14px 0;
-  background:hsl(var(--card));
-  border:1px solid hsl(var(--border));
-  border-radius:var(--r);
-  overflow:visible;
-  position:relative;
-  /* soft shadow for depth */
-  box-shadow:0 1px 3px rgba(45,42,38,.05);
-}
-.card.travel{border-left:3px solid hsl(var(--rose))}
-.card.card-dragging{opacity:.35;pointer-events:none}
-.card.card-drag-over{outline:2px solid hsl(var(--primary));border-radius:var(--r)}
-
-.card-hd{
-  padding:11px 14px;
-  display:flex;align-items:center;justify-content:space-between;
-  cursor:pointer;gap:8px;
-}
-.card-hd.open{border-bottom:1px solid hsl(var(--border))}
-
-/* ── INLINE HEADER LAYOUT ─────────────────
-   Travel days: "3  ·  Fri 4/12  ·  Mammoth  · ✈ Travel"
-   All on one line, no stacking
-──────────────────────────────────────────── */
-.card-hd-left{
-  display:flex;align-items:baseline;gap:8px;flex:1;min-width:0;
-  overflow:hidden;
-}
-/* The big day number */
-.card-num{
-  font-size:18px;font-weight:700;color:hsl(var(--foreground));
-  line-height:1;flex-shrink:0;
-}
-/* Everything after it — inline, wraps gracefully */
-.card-sub{
-  font-size:13px;color:hsl(var(--muted-foreground));
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  line-height:1.3;
-}
-.dest-inline{font-weight:600}
-/* Travel label — rose tint inline */
-.travel-inline{
-  color:hsl(var(--rose));font-weight:500;
-}
-/* For pack-section cards that have a bigger name */
-.card-name{
-  font-size:15px;font-weight:600;color:hsl(var(--foreground));line-height:1.2;
-}
-.card-desc{font-size:13px;color:hsl(var(--muted-foreground));margin-top:1px}
-
-.card-hd-right{
-  display:flex;align-items:center;gap:6px;flex-shrink:0;
-}
-.card-count{
-  font-size:13px;color:hsl(var(--muted-foreground));
-  background:hsl(var(--muted));border-radius:20px;
-  padding:2px 9px;
-}
-/* edit dropdown */
-.card-menu-btn{
-  width:28px;height:28px;border-radius:var(--rsm);
-  border:none;background:none;color:hsl(var(--muted-foreground));
-  font-size:18px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  position:relative;z-index:10;letter-spacing:1px;line-height:1;
-}
-.card-menu-btn:active{background:hsl(var(--muted))}
-.card-dropdown{
-  position:absolute;top:calc(100%+4px);right:0;
-  background:hsl(var(--card));border:1px solid hsl(var(--border));
-  border-radius:var(--rs);box-shadow:0 6px 24px rgba(45,42,38,.12);
-  z-index:100;min-width:160px;display:none;overflow:hidden;
-}
-.card-dropdown.open{display:block;animation:fadeIn .12s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-.dd-item{
-  padding:11px 14px;font-size:14px;color:hsl(var(--card-foreground));
-  cursor:pointer;display:flex;align-items:center;gap:8px;
-}
-.dd-item:hover,.dd-item:active{background:hsl(var(--muted))}
-.dd-item.danger{color:#DC2626}
-.dd-item+.dd-item{border-top:1px solid hsl(var(--border))}
-
-.chevron{font-size:9px;color:hsl(var(--muted-foreground));transition:transform .18s}
-.chevron.open{transform:rotate(180deg)}
-
-.card-body{padding:12px 14px 14px;display:none;overflow:hidden}
-.card-body.open{display:block}
-
-/* ══════════════════════════════
-   TOOLTIP
-══════════════════════════════ */
-.tip{
-  position:fixed;z-index:400;
-  background:hsl(var(--foreground));color:#fff;
-  border-radius:var(--rs);padding:9px 13px;
-  font-size:13px;line-height:1.5;max-width:220px;
-  pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.18);
-  display:none;
-}
-.tip.show{display:block;animation:tipIn .12s ease}
-@keyframes tipIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
-.tip-name{font-weight:600;color:#fff;margin-bottom:2px}
-.tip-cat{font-size:11px;color:rgba(255,255,255,.55);text-transform:uppercase;
-  letter-spacing:.6px;margin-bottom:6px}
-.tip-item{display:block;font-size:12px;color:rgba(255,255,255,.82);padding:1px 0}
-
-/* ══════════════════════════════
-   DAY EDITOR
-══════════════════════════════ */
-
-/* Slot head — subtle, lowercase, tertiary */
-.slot-head{
-  font-size:12px;font-weight:500;
-  color:hsl(var(--muted-foreground));
-  margin-bottom:7px;
-  /* NO uppercase, NO tracking — just quiet */
-}
-.slot-head+.slot-head{margin-top:14px}
-
-.slot-editor{
-  font-size:16px;line-height:1.7;
-  color:hsl(var(--card-foreground));outline:none;
-  min-height:28px;word-break:break-word;
-  caret-color:hsl(var(--primary));
-  -webkit-user-modify:read-write-plaintext-only;
-}
-.slot-editor:empty::before{
-  content:attr(data-ph);color:hsl(var(--muted-foreground));pointer-events:none;
-}
-/* Activity keyword tint */
-.slot-editor .linked{
-  color:hsl(var(--primary));background:hsl(var(--secondary));
-  border-radius:var(--rsm);padding:0 4px;cursor:default;
-}
-.slot-editor .linked.carry{color:hsl(var(--amb));background:hsl(var(--amb-bg))}
-/* Flight code tint — distinct purple */
-.slot-editor .flt-code{
-  color:hsl(var(--flt));background:hsl(var(--flt-bg));
-  border-radius:var(--rsm);padding:0 4px;cursor:pointer;
-  font-weight:500;
-}
-/* Rich text bullets */
-.slot-editor .bullet-line{
-  display:flex;align-items:flex-start;gap:6px;
-  padding-left:2px;
-}
-.slot-editor .bullet-line::before{
-  content:'•';color:hsl(var(--muted-foreground));flex-shrink:0;
-  margin-top:.05em;
-}
-
-.slot-divider{height:1px;background:hsl(var(--border));margin:13px 0;opacity:.5}
-.notes-head{
-  font-size:12px;font-weight:500;color:hsl(var(--muted-foreground));
-  margin:14px 0 7px;
-}
-.notes-editor{
-  font-size:15px;line-height:1.65;color:hsl(var(--card-foreground));
-  outline:none;min-height:20px;word-break:break-word;
-  caret-color:hsl(var(--primary));
-  -webkit-user-modify:read-write-plaintext-only;
-}
-.notes-editor:empty::before{content:attr(data-ph);color:hsl(var(--muted-foreground));pointer-events:none}
-
-/* Flight code inline info strip */
-.flight-strip{
-  display:flex;align-items:center;gap:10px;
-  margin:5px 0 2px;padding:8px 11px;
-  background:hsl(var(--flt-bg));border:1px solid hsl(var(--secondary-foreground));
-  border-radius:var(--rs);font-size:13px;color:hsl(var(--card-foreground));
-}
-.fs-code{font-weight:700;color:hsl(var(--flt));font-size:14px}
-.fs-info{flex:1;line-height:1.4}
-.fs-tag{font-size:11px;color:hsl(var(--muted-foreground));margin-left:auto;flex-shrink:0}
-
-/* Banners */
-.banner{
-  margin:10px 14px 0;padding:10px 14px;
-  border-radius:var(--rs);font-size:14px;line-height:1.5;
-}
-.banner.warn{background:hsl(var(--amb-bg));color:hsl(var(--amb));border-left:3px solid #D97706}
-.banner.info{background:hsl(var(--secondary));color:hsl(var(--primary));border-left:3px solid hsl(var(--primary))}
-.banner strong{font-weight:600}
-
-.smart-alert{
-  padding:9px 14px;background:hsl(var(--rose-bg));
-  font-size:14px;color:hsl(var(--rose));
-  display:flex;align-items:center;gap:8px;
-  border-bottom:1px solid hsl(var(--border));
-}
-.sa-text{flex:1;line-height:1.4}
-.sa-skip{font-size:13px;color:hsl(var(--muted-foreground));cursor:pointer;padding:4px}
-
-.add-day-wrap{margin:8px 14px 0;display:flex;flex-wrap:wrap;gap:6px}
-.add-day-btn{
-  padding:9px 14px;background:none;
-  border:1px dashed hsl(var(--border));border-radius:var(--rs);
-  font-family:'Inter',sans-serif;font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;
-}
-.add-day-btn:active{border-color:hsl(var(--primary));color:hsl(var(--primary))}
-
-/* ══════════════════════════════
-   OUTFITS PAGE
-══════════════════════════════ */
-.out-wrap{padding:0 14px 100px}
-.out-view-toggle{display:flex;gap:6px;padding:8px 0 4px}
-.out-toggle-btn{
-  padding:5px 13px;border-radius:20px;
-  font-size:13px;font-weight:500;
-  border:1px solid hsl(var(--border));background:hsl(var(--card));
-  color:hsl(var(--muted-foreground));cursor:pointer;font-family:'Inter',sans-serif;
-  transition:all .12s;
-}
-.out-toggle-btn.on{background:hsl(var(--foreground));border-color:hsl(var(--foreground));color:#fff}
-
-.outfit-slot-row{
-  display:flex;align-items:flex-start;gap:10px;
-  padding:9px 0;border-bottom:1px solid hsl(var(--border));
-}
-.outfit-slot-row:last-child{border-bottom:none}
-.osr-left{flex:1;min-width:0}
-.osr-name{font-size:15px;color:hsl(var(--card-foreground));line-height:1.5}
-.outfit-tip-target{
-  cursor:default;color:hsl(var(--primary));background:hsl(var(--secondary));
-  border-radius:var(--rsm);padding:0 4px;display:inline;
-}
-.outfit-tip-target.carry{color:hsl(var(--amb));background:hsl(var(--amb-bg))}
-.osr-sources{font-size:12px;color:hsl(var(--muted-foreground));margin-top:2px}
-.osr-right{flex-shrink:0}
-.osr-count{
-  font-size:12px;color:hsl(var(--muted-foreground));
-  background:hsl(var(--muted));border-radius:20px;padding:2px 8px;
-}
-
-.out-empty{padding:32px 0;font-size:15px;color:hsl(var(--muted-foreground));text-align:center}
-.odb-item{
-  display:inline;font-size:14px;color:hsl(var(--primary));
-  background:hsl(var(--secondary));border-radius:var(--rsm);padding:0 4px;
-  margin:0 3px 4px 0;
-}
-.odb-item.carry{color:hsl(var(--amb));background:hsl(var(--amb-bg))}
-.odb-add{display:inline;font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;padding:0 4px}
-.odb-add:active{color:hsl(var(--primary))}
-
-/* ══════════════════════════════
-   PACKING LIST
-══════════════════════════════ */
-.pack-wrap{padding:0 14px 100px}
-.pack-note{
-  padding:9px 12px;background:hsl(var(--secondary));
-  border-left:3px solid hsl(var(--primary));
-  border-radius:0 var(--rs) var(--rs) 0;
-  font-size:14px;color:hsl(var(--primary));line-height:1.5;margin:8px 0;
-}
-.pack-note strong{font-weight:600}
-.card-group-list{display:flex;flex-direction:column}
-
-.list-row{display:flex;align-items:center;gap:10px;padding:9px 0}
-.list-row+.list-row{border-top:1px solid hsl(var(--border))}
-.cb{
-  width:22px;height:22px;border-radius:6px;
-  border:1px solid hsl(var(--border));background:hsl(var(--background));
-  flex-shrink:0;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  transition:background .12s,border-color .12s;
-}
-.cb.on{background:hsl(var(--foreground));border-color:hsl(var(--foreground))}
-.cb.on::after{content:'✓';color:#fff;font-size:11px;font-weight:700}
-.cb.green.on{background:hsl(var(--grn));border-color:hsl(var(--grn))}
-.item-txt{flex:1;font-size:15px;color:hsl(var(--card-foreground));line-height:1.4}
-.item-txt.done{text-decoration:line-through;color:hsl(var(--muted-foreground))}
-.carry-lbl{
-  font-size:12px;color:hsl(var(--amb));background:hsl(var(--amb-bg));
-  border-radius:var(--rsm);padding:1px 7px;flex-shrink:0;
-}
-.item-note{font-size:12px;color:hsl(var(--muted-foreground));flex-shrink:0}
-.from-lbl{font-size:12px;color:hsl(var(--muted-foreground));flex-shrink:0}
-.synced-dot{
-  width:5px;height:5px;border-radius:50%;
-  background:hsl(var(--primary));flex-shrink:0;opacity:.5;
-}
-.row-add{font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;padding:9px 0}
-.row-add:active{color:hsl(var(--primary))}
-.add-card-btn{
-  width:100%;margin-top:8px;padding:12px;
-  border:1px dashed hsl(var(--border));border-radius:var(--r);
-  background:none;font-family:'Inter',sans-serif;
-  font-size:14px;color:hsl(var(--muted-foreground));cursor:pointer;text-align:center;
-}
-.add-card-btn:active{border-color:hsl(var(--primary));color:hsl(var(--primary))}
-
-/* ══════════════════════════════
-   SHEETS
-══════════════════════════════ */
-.overlay{
-  position:fixed;inset:0;background:rgba(45,42,38,.45);
-  z-index:200;display:none;align-items:flex-end;
-  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
-  touch-action:none;
-}
-.overlay.open{display:flex}
-.sheet{
-  background:hsl(var(--card));border-radius:20px 20px 0 0;
-  width:100%;max-height:90vh;
-  overflow-y:auto;overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
-  animation:sheetUp .2s ease;
-}
-.sheet::-webkit-scrollbar{display:none}
-@keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
-.sheet-handle{
-  width:36px;height:3px;background:hsl(var(--border));
-  border-radius:2px;margin:12px auto 0;
-}
-.sheet-body{padding:16px 20px 48px}
-.sheet-title{font-size:20px;font-weight:700;color:hsl(var(--foreground));margin-bottom:4px}
-.sheet-sub{font-size:14px;color:hsl(var(--muted-foreground));margin-bottom:16px;line-height:1.5}
-.sh-lbl{
-  display:block;font-size:13px;font-weight:500;
-  color:hsl(var(--muted-foreground));margin:14px 0 7px;
-}
-.sh-lbl:first-of-type{margin-top:2px}
-.sh-inp{
-  width:100%;background:hsl(var(--background));
-  border:1px solid hsl(var(--border));border-radius:var(--rs);
-  padding:12px 14px;font-family:'Inter',sans-serif;
-  font-size:16px;color:hsl(var(--foreground));outline:none;
-  margin-bottom:8px;transition:border-color .12s,box-shadow .12s;
-}
-.sh-inp:focus{border-color:hsl(var(--ring));box-shadow:0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))}
-.sh-inp::placeholder{color:hsl(var(--muted-foreground))}
-.sh-row{display:flex;gap:8px;margin-bottom:8px}
-.sh-row .sh-inp{flex:1;margin-bottom:0}
-.carry-row{display:flex;align-items:center;gap:10px;padding:6px 0 12px}
-.carry-row input[type=checkbox]{width:20px;height:20px;accent-color:hsl(var(--primary));cursor:pointer;flex-shrink:0}
-.carry-row label{font-size:15px;color:hsl(var(--card-foreground));cursor:pointer;line-height:1.4}
-.sh-cta{
-  width:100%;padding:14px;background:hsl(var(--primary));border:none;
-  border-radius:var(--r);font-family:'Inter',sans-serif;
-  font-size:16px;font-weight:600;color:hsl(var(--primary-foreground));cursor:pointer;margin-top:8px;
-}
-.sh-cta:hover{background:hsl(var(--primary)/.9)}
-.sh-cta:active{background:hsl(var(--primary)/.8)}
-.sh-cancel{
-  width:100%;padding:10px;background:none;border:none;
-  font-family:'Inter',sans-serif;font-size:15px;
-  color:hsl(var(--muted-foreground));cursor:pointer;margin-top:4px;
-}
-.sh-cancel:hover{background:hsl(var(--secondary));color:hsl(var(--secondary-foreground))}
-.sh-cta.danger{background:hsl(var(--destructive));color:hsl(var(--destructive-foreground))}
-.sh-cta.danger:hover{background:hsl(var(--destructive)/.9)}
-</style>
-</head>
-<body>
-
-<!-- SETUP -->
-<div class="setup" id="setup">
-  <div class="setup-top">
-    <div class="logo">Way<span>point</span></div>
-    <div class="logo-sub">Days first. Packing follows.</div>
-  </div>
-  <div class="sf">
-    <label class="sf-lbl" for="sName">Trip name</label>
-    <input class="sf-inp" id="sName" placeholder="e.g. Mammoth with Matt" autocomplete="off">
-    <span class="sf-lbl">Who's coming?</span>
-    <div class="who-wrap" id="whoWrap"></div>
-    <div class="who-row">
-      <input class="sf-inp" id="whoInp" placeholder="Add name…" autocomplete="off"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();whoAdd()}">
-      <button class="who-add-btn" onclick="whoAdd()">+</button>
-    </div>
-    <label class="sf-lbl">Departure</label>
-    <div class="sf-row">
-      <input class="sf-inp" type="date" id="sDepD">
-      <input class="sf-inp sf-mini" type="time" id="sDepT">
-    </div>
-    <label class="sf-lbl">Destinations &amp; nights</label>
-    <div class="dest-list" id="destList">
-      <div class="dest-row">
-        <span class="drag-handle">⠿</span>
-        <input class="sf-inp" placeholder="e.g. Mammoth Lakes" autocomplete="off">
-        <input class="sf-inp sf-mini" type="number" min="1" placeholder="nts">
-        <button class="dest-rm" onclick="destRm(this)">×</button>
-      </div>
-    </div>
-    <button class="add-dest-btn" onclick="destAdd('destList')">+ Add destination</button>
-    <label class="sf-lbl" for="sRetD">Return date</label>
-    <input class="sf-inp" type="date" id="sRetD">
-    <button class="setup-cta" onclick="go()">Build trip →</button>
-  </div>
-</div>
-
-<!-- APP -->
-<div class="app" id="app" style="display:none">
-  <div class="hdr">
-    <div class="hdr-left">
-      <div class="hdr-trip" id="hTrip" onclick="openEditTrip()">—</div>
-      <div class="hdr-meta" id="hMeta">—</div>
-    </div>
-    <div class="hdr-edit" onclick="openEditTrip()">Edit trip</div>
-  </div>
-  <div class="nav">
-    <button class="nav-btn on" id="nb-days"    onclick="goNav('days')">Days</button>
-    <button class="nav-btn"    id="nb-outfits" onclick="goNav('outfits')">Outfits</button>
-    <button class="nav-btn"    id="nb-pack"    onclick="goNav('pack')">Packing</button>
-  </div>
-  <div class="main-scr" id="mainScr">
-
-    <!-- DAYS -->
-    <div class="sec on" id="sec-days">
-      <div id="banners"></div>
-      <div id="dayList"></div>
-      <div class="add-day-wrap" id="addDayWrap"></div>
-    </div>
-
-    <!-- OUTFITS -->
-    <div class="sec" id="sec-outfits">
-      <div class="sec-hd"><div class="sec-title">Outfits</div></div>
-      <div class="out-wrap" id="outfitContent"></div>
-    </div>
-
-    <!-- PACKING -->
-    <div class="sec" id="sec-pack">
-      <div class="sec-hd">
-        <div class="sec-title">Packing</div>
-        <div class="sec-act" id="packSecAct"></div>
-      </div>
-      <div class="view-pills">
-        <button class="vpill on" onclick="setPackView('category')">By category</button>
-        <button class="vpill"    onclick="setPackView('bag')">By bag</button>
-        <button class="vpill"    onclick="setPackView('purpose')">By purpose</button>
-      </div>
-      <div class="pack-wrap" id="packContent"></div>
-    </div>
-  </div>
-</div>
-
-<!-- TOOLTIP -->
-<div class="tip" id="tip">
-  <div class="tip-name" id="tipName"></div>
-  <div class="tip-cat"  id="tipCat"></div>
-  <div class="tip-items" id="tipItems"></div>
-</div>
-
-<!-- SHEET: Edit trip -->
-
-<!-- OVERLAY: Edit Item (Multi-context) -->
-<div class="overlay" id="ovEditItem" onclick="if(event.target===this)closeAll()">
-  <div class="sheet">
-    <div class="sheet-hd">
-      <div class="sheet-title" id="edit-item-title">Edit Item</div>
-      <button class="icon-btn" onclick="closeAll()">×</button>
-    </div>
-    <div class="sheet-body">
-      <label class="sf-lbl">Name</label>
-      <input class="sf-inp" id="ei-name" autocomplete="off">
-      <div style="display:flex;align-items:center;margin:16px 0;">
-        <input type="checkbox" id="ei-carry" style="width:20px;height:20px;margin-right:10px;">
-        <label for="ei-carry" style="font-size:15px">Carry-on only</label>
-      </div>
-      <label class="sf-lbl">Note</label>
-      <input class="sf-inp" id="ei-note" placeholder="Optional note" autocomplete="off">
-
-      <div class="sf-lbl" style="margin-top:24px;border-bottom:1px solid hsl(var(--border));padding-bottom:8px">Assign to Days</div>
-      <div id="ei-days-list" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-
-      <div class="sf-lbl" style="margin-top:24px;border-bottom:1px solid hsl(var(--border));padding-bottom:8px">Assign to Bags</div>
-      <div id="ei-bags-list" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-
-      <div class="sf-lbl" style="margin-top:24px;border-bottom:1px solid hsl(var(--border));padding-bottom:8px">Assign to Categories</div>
-      <div id="ei-cats-list" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-
-      <div class="sf-lbl" style="margin-top:24px;border-bottom:1px solid hsl(var(--border));padding-bottom:8px">Assign to Purposes</div>
-      <div id="ei-purs-list" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
-    </div>
-    <div class="sheet-ft">
-      <button class="btn w-full danger" style="margin-bottom:8px" onclick="deleteEditItem()">Delete Item</button>
-      <button class="btn w-full" onclick="commitEditItem()">Save Item</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="ovET" onclick="if(event.target===this)closeAll()">
-  <div class="sheet" onclick="event.stopPropagation()">
-    <div class="sheet-handle"></div>
-    <div class="sheet-body">
-      <div class="sheet-title">Edit trip</div>
-      <span class="sh-lbl">Trip name</span>
-      <input class="sh-inp" id="et-name" autocomplete="off">
-      <span class="sh-lbl">Departure</span>
-      <div class="sh-row">
-        <input class="sh-inp" type="date" id="et-depd">
-        <input class="sh-inp sf-mini" type="time" id="et-dept">
-      </div>
-      <span class="sh-lbl">Return</span>
-      <input class="sh-inp" type="date" id="et-retd">
-      <span class="sh-lbl">Destinations <span style="font-weight:400;font-size:12px">— drag to reorder</span></span>
-      <div id="etDestList"></div>
-      <button class="add-dest-btn" style="margin-top:4px" onclick="etDestAdd()">+ Destination</button>
-      <button class="sh-cta" onclick="saveTrip()">Save</button>
-      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- SHEET: Add item -->
-<div class="overlay" id="ovAI" onclick="if(event.target===this)closeAll()">
-  <div class="sheet" onclick="event.stopPropagation()">
-    <div class="sheet-handle"></div>
-    <div class="sheet-body">
-      <div class="sheet-title" id="ai-title">Add item</div>
-      <div class="sheet-sub"   id="ai-sub"></div>
-      <input class="sh-inp" id="ai-inp" placeholder="Item name…" autocomplete="off"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();commitItem()}">
-      <div class="carry-row" id="ai-carry-row">
-        <input type="checkbox" id="ai-carry">
-        <label for="ai-carry">Carry with me — purse or backpack, not checked luggage</label>
-      </div>
-      <button class="sh-cta" onclick="commitItem()">Add item</button>
-      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- SHEET: Edit group -->
-<div class="overlay" id="ovEdit" onclick="if(event.target===this)closeAll()">
-  <div class="sheet" onclick="event.stopPropagation()">
-    <div class="sheet-handle"></div>
-    <div class="sheet-body">
-      <div class="sheet-title" id="edit-title">Edit</div>
-      <span class="sh-lbl">Name</span>
-      <input class="sh-inp" id="edit-name" autocomplete="off">
-      <span class="sh-lbl" id="edit-desc-lbl">Description</span>
-      <input class="sh-inp" id="edit-desc" placeholder="Optional" autocomplete="off">
-      <button class="sh-cta" onclick="commitEdit()">Save</button>
-      <button class="sh-cta danger" onclick="commitRemove()" style="margin-top:6px">Remove</button>
-      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- SHEET: Add group -->
-<div class="overlay" id="ovAG" onclick="if(event.target===this)closeAll()">
-  <div class="sheet" onclick="event.stopPropagation()">
-    <div class="sheet-handle"></div>
-    <div class="sheet-body">
-      <div class="sheet-title" id="ag-title">New group</div>
-      <div class="sheet-sub"   id="ag-sub"></div>
-      <input class="sh-inp" id="ag-name" placeholder="Name" autocomplete="off">
-      <input class="sh-inp" id="ag-desc" placeholder="Description (optional)" autocomplete="off">
-      <button class="sh-cta" onclick="commitGroup()">Create</button>
-      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<script>
 'use strict';
 
 // ═══════════════════════════════════════
@@ -935,9 +146,9 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catIds=[],bagIds=[],purIds=[],carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryIds:Array.isArray(catIds)?catIds:(catIds?[catIds]:[]),bagIds:Array.isArray(bagIds)?bagIds:(bagIds?[bagIds]:[]),purposeIds:Array.isArray(purIds)?purIds:(purIds?[purIds]:[]),
-    carry,checked:false,auto,note,dayIds:[],scenarios:[]};
+function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
+  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+    carry,checked:false,auto,note};
 }
 
 let CATS=[
@@ -1186,12 +397,6 @@ function buildDayCard(day){
   // Build any flight strips for detected codes
   const flightStrips=buildFlightStrips(day);
 
-  // Directly attached items
-  const attachedItems = ITEMS.filter(i => (i.dayIds||[]).includes(day.id));
-  const attachedHtml = attachedItems.length > 0 ?
-    `<div class="slot-head" style="margin-top:16px;">attached items</div>` +
-    attachedItems.map(i => itemRow(i, true)).join('') : '';
-
   return`<div class="card${day.isTravel?' travel':''}" id="card-${day.id}">
     <div class="card-hd${isOpen?' open':''}" onclick="toggleCard('${day.id}')">
       <div class="card-hd-left">
@@ -1225,8 +430,6 @@ function buildDayCard(day){
         data-ph="Reminders, reservations, anything…"
         spellcheck="false" autocapitalize="sentences"
       >${esc(day.noteText||'')}</div>
-      ${attachedHtml}
-      <div class="row-add" style="margin-top:12px; border-top:1px dashed hsl(var(--border)); padding-top:12px;" onclick="openAddItem('day','${day.id}')">+ Add item</div>
     </div>
   </div>`;
 }
@@ -1705,21 +908,13 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>(i.categoryIds||[]).includes(cat.id));
+    const items=ITEMS.filter(i=>i.categoryId===cat.id);
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
-  const unassigned = ITEMS.filter(i => !(i.categoryIds && i.categoryIds.length > 0));
-  if(unassigned.length > 0) {
-    const done=unassigned.filter(i=>i.checked).length;
-    const open=openCards.has('cat-unassigned');
-    h+=packCard({id:'cat-unassigned',gid:'unassigned',name:'Uncategorized',sub:'No category assigned',
-      count:`${done}/${unassigned.length}`,open,editType:'cat',
-      body:unassigned.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','unassigned')">+ Add item</div>`});
-  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1729,21 +924,13 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>(i.bagIds||[]).includes(bag.id));
+    const items=ITEMS.filter(i=>i.bagId===bag.id);
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
-  const unassigned = ITEMS.filter(i => !(i.bagIds && i.bagIds.length > 0));
-  if(unassigned.length > 0) {
-    const done=unassigned.filter(i=>i.checked).length;
-    const open=openCards.has('bag-unassigned');
-    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unassigned Bag',sub:'No bag assigned',
-      count:`${done}/${unassigned.length}`,open,editType:'bag',
-      body:unassigned.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','unassigned')">+ Add item</div>`});
-  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1753,35 +940,25 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>(i.purposeIds||[]).includes(pur.id));
+    const items=ITEMS.filter(i=>i.purposeId===pur.id);
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
-  const unassigned = ITEMS.filter(i => !(i.purposeIds && i.purposeIds.length > 0));
-  if(unassigned.length > 0) {
-    const done=unassigned.filter(i=>i.checked).length;
-    const open=openCards.has('pur-unassigned');
-    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Unassigned Purpose',sub:'No purpose assigned',
-      count:`${done}/${unassigned.length}`,open,editType:'purpose',
-      body:unassigned.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','unassigned')">+ Add item</div>`});
-  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
-  // Find first assigned category name if we want to show it
-  const catName = item.categoryIds && item.categoryIds.length ? CATS.find(c=>c.id===item.categoryIds[0])?.name : '';
   return`<div class="list-row" data-item-id="${item.id}">
-    <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}'); event.stopPropagation();"></div>
-    <div class="item-txt${ck?' done':''}" onclick="openEditItem('${item.id}')" style="cursor:pointer">${esc(item.name)}</div>
-    ${item.carry?`<span class="carry-lbl" onclick="openEditItem('${item.id}')" style="cursor:pointer">carry</span>`:''}
-    ${item.note?`<span class="item-note" onclick="openEditItem('${item.id}')" style="cursor:pointer">${esc(item.note)}</span>`:''}
-    ${showBag&&catName?`<span class="from-lbl" onclick="openEditItem('${item.id}')" style="cursor:pointer">${esc(catName)}</span>`:''}
-    <div class="synced-dot" title="Synced across all views" onclick="openEditItem('${item.id}')" style="cursor:pointer"></div>
+    <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
+    <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
+    ${item.carry?`<span class="carry-lbl">carry</span>`:''}
+    ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
+    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
 function packCard({id,gid,name,sub,count,open,editType,body}){
@@ -1863,21 +1040,9 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){
-    CATS=CATS.filter(c=>c.id!==id);
-    ITEMS.forEach(i=>{if(i.categoryIds) i.categoryIds=i.categoryIds.filter(x=>x!==id);});
-    catOrder=catOrder.filter(x=>x!==id);
-  }
-  else if(type==='bag'){
-    BAGS=BAGS.filter(b=>b.id!==id);
-    ITEMS.forEach(i=>{if(i.bagIds) i.bagIds=i.bagIds.filter(x=>x!==id);});
-    bagOrder=bagOrder.filter(x=>x!==id);
-  }
-  else{
-    PURPOSES=PURPOSES.filter(p=>p.id!==id);
-    ITEMS.forEach(i=>{if(i.purposeIds) i.purposeIds=i.purposeIds.filter(x=>x!==id);});
-    purposeOrder=purposeOrder.filter(x=>x!==id);
-  }
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
+  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
+  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1903,86 +1068,6 @@ function commitGroup(){
 
 // ═══════════════════════════════════════
 //  COMMIT ITEM
-
-let editingItemId = null;
-let editItemDraft = null;
-
-function openEditItem(itemId) {
-  const item = ITEMS.find(i => i.id === itemId);
-  if (!item) return;
-  editingItemId = itemId;
-  // Create a deep copy for the draft
-  editItemDraft = JSON.parse(JSON.stringify(item));
-
-  document.getElementById('ei-name').value = item.name;
-  document.getElementById('ei-carry').checked = item.carry;
-  document.getElementById('ei-note').value = item.note || '';
-
-  // Days
-  let daysHtml = days.map(d => {
-    const isChecked = editItemDraft.dayIds?.includes(d.id) ? 'checked' : '';
-    return `<label style="display:flex;align-items:center"><input type="checkbox" value="${d.id}" ${isChecked} onchange="toggleDraftArr('dayIds', '${d.id}', this.checked)" style="margin-right:8px;width:16px;height:16px"> Day ${d.dayNum} - ${T.destinations[d.destIdx]?.name}</label>`;
-  }).join('');
-  document.getElementById('ei-days-list').innerHTML = daysHtml || '<div style="color:hsl(var(--muted-foreground));font-size:14px">No days added yet.</div>';
-
-  // Bags
-  let bagsHtml = BAGS.map(b => {
-    const isChecked = editItemDraft.bagIds?.includes(b.id) ? 'checked' : '';
-    return `<label style="display:flex;align-items:center"><input type="checkbox" value="${b.id}" ${isChecked} onchange="toggleDraftArr('bagIds', '${b.id}', this.checked)" style="margin-right:8px;width:16px;height:16px"> ${b.name}</label>`;
-  }).join('');
-  document.getElementById('ei-bags-list').innerHTML = bagsHtml;
-
-  // Categories
-  let catsHtml = CATS.map(c => {
-    const isChecked = editItemDraft.categoryIds?.includes(c.id) ? 'checked' : '';
-    return `<label style="display:flex;align-items:center"><input type="checkbox" value="${c.id}" ${isChecked} onchange="toggleDraftArr('categoryIds', '${c.id}', this.checked)" style="margin-right:8px;width:16px;height:16px"> ${c.name}</label>`;
-  }).join('');
-  document.getElementById('ei-cats-list').innerHTML = catsHtml;
-
-  // Purposes
-  let pursHtml = PURPOSES.map(p => {
-    const isChecked = editItemDraft.purposeIds?.includes(p.id) ? 'checked' : '';
-    return `<label style="display:flex;align-items:center"><input type="checkbox" value="${p.id}" ${isChecked} onchange="toggleDraftArr('purposeIds', '${p.id}', this.checked)" style="margin-right:8px;width:16px;height:16px"> ${p.name}</label>`;
-  }).join('');
-  document.getElementById('ei-purs-list').innerHTML = pursHtml;
-
-  openOv('ovEditItem');
-}
-
-function toggleDraftArr(arrName, val, isChecked) {
-  if (!editItemDraft[arrName]) editItemDraft[arrName] = [];
-  if (isChecked) {
-    if (!editItemDraft[arrName].includes(val)) editItemDraft[arrName].push(val);
-  } else {
-    editItemDraft[arrName] = editItemDraft[arrName].filter(x => x !== val);
-  }
-}
-
-function commitEditItem() {
-  const item = ITEMS.find(i => i.id === editingItemId);
-  if (!item) return;
-  item.name = document.getElementById('ei-name').value.trim() || item.name;
-  item.carry = document.getElementById('ei-carry').checked;
-  item.note = document.getElementById('ei-note').value.trim();
-  item.dayIds = [...(editItemDraft.dayIds || [])];
-  item.bagIds = [...(editItemDraft.bagIds || [])];
-  item.categoryIds = [...(editItemDraft.categoryIds || [])];
-  item.purposeIds = [...(editItemDraft.purposeIds || [])];
-
-  closeAll();
-  Haptic.medium();
-  renderPack();
-  renderDays();
-}
-
-function deleteEditItem() {
-  ITEMS = ITEMS.filter(i => i.id !== editingItemId);
-  closeAll();
-  Haptic.medium();
-  renderPack();
-  renderDays();
-}
-
 // ═══════════════════════════════════════
 function commitItem(){
   const nm=document.getElementById('ai-inp').value.trim();if(!nm||!aiCtx)return;
@@ -1993,15 +1078,12 @@ function commitItem(){
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
   }else if(aiCtx.type==='packitem'){
-    let catIds=[],bagIds=[],purIds=[],dayIds=[];
-    if(aiCtx.viewType==='cat'&&aiCtx.groupId!=='unassigned'){catIds=[aiCtx.groupId];purIds=[CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech'];}
-    else if(aiCtx.viewType==='bag'&&aiCtx.groupId!=='unassigned'){bagIds=[aiCtx.groupId];}
-    else if(aiCtx.viewType==='day'){dayIds=[aiCtx.groupId];}
-    else if(aiCtx.viewType==='pur'&&aiCtx.groupId!=='unassigned'){purIds=[aiCtx.groupId];}
-    let itm = mkItem(nm,catIds,bagIds,purIds,carry);
-    itm.dayIds = dayIds;
-    ITEMS.push(itm);
-    closeAll();Haptic.medium();renderPack();renderDays();
+    let catId='health',bagId='main',purId='toiletry';
+    if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
+    else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
+    else{purId=aiCtx.groupId;}
+    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    closeAll();Haptic.medium();renderPack();
   }
 }
 
@@ -2059,6 +1141,3 @@ function goNav(id){
   if(id==='pack'){setPackView(packView);}
   if(id==='outfits')renderOutfits();
 }
-</script>
-</body>
-</html>

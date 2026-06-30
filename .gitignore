@@ -1,0 +1,5 @@
+node_modules/
+*.png
+test_model.js
+test_model2.js
+test_frontend.js

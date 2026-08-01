@@ -718,6 +718,37 @@ body{
   </div>
 </div>
 
+<!-- SHEET: Edit Item (Multi-context) -->
+<div class="overlay" id="ovEditItem" onclick="if(event.target===this)closeAll()">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-body">
+      <div class="sheet-title">Edit Item</div>
+      <input class="sh-inp" id="ei-name" autocomplete="off" style="margin-bottom:12px;">
+
+      <span class="sh-lbl">Categories</span>
+      <div id="ei-cats" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+
+      <span class="sh-lbl">Bags / Locations</span>
+      <div id="ei-bags" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+
+      <span class="sh-lbl">Purposes</span>
+      <div id="ei-purs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+
+      <span class="sh-lbl">Days</span>
+      <div id="ei-days" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"></div>
+
+      <div class="carry-row" style="padding:0 0 12px">
+        <input type="checkbox" id="ei-carry">
+        <label for="ei-carry">Carry with me</label>
+      </div>
+
+      <button class="sh-cta" onclick="saveEditItem()">Save</button>
+      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- SHEET: Edit group -->
 <div class="overlay" id="ovEdit" onclick="if(event.target===this)closeAll()">
   <div class="sheet" onclick="event.stopPropagation()">
@@ -899,8 +930,19 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
-    carry,checked:false,auto,note};
+  return{
+    id:'item-'+(itemIdSeq++),
+    name,
+    categoryIds: catId ? [catId] : [],
+    bagIds: bagId ? [bagId] : [],
+    purposeIds: purId ? [purId] : [],
+    dayIds: [],
+    scenarios: [],
+    carry,
+    checked:false,
+    auto,
+    note
+  };
 }
 
 let CATS=[
@@ -1069,11 +1111,14 @@ function buildDays(){
   });
   const prev=new Map(days.map(d=>[d.id,d]));
   days=[];
-  const start=T.depDate?new Date(T.depDate+'T12:00:00'):new Date();
+  const start=T.depDate?new Date(T.depDate+'T12:00:00'):null;
   let n=1;
   T.destinations.forEach((dest,di)=>{
     for(let d=0;d<dest.nights;d++){
-      const date=new Date(start);date.setDate(start.getDate()+(n-1));
+      let date=null;
+      if (start) {
+        date=new Date(start);date.setDate(start.getDate()+(n-1));
+      }
       const isFirst=n===1,isTransfer=d===dest.nights-1&&di<T.destinations.length-1;
       const isLast=di===T.destinations.length-1&&d===dest.nights-1;
       const id='d'+n,old=prev.get(id)||{};
@@ -1154,7 +1199,7 @@ function buildDayCard(day){
       <div class="card-hd-left">
         <div class="card-num">${day.dayNum}</div>
         <div class="card-sub">
-          ${DOW[day.date.getDay()]} ${fmt(day.date)} ·
+          ${day.date ? DOW[day.date.getDay()] + ' ' + fmt(day.date) + ' · ' : ''}
           <span class="dest-inline" style="color:${dest.color}">${esc(dest.name)}</span>
           ${day.isTravel?`<span class="travel-inline"> · ✈ Travel</span>`:''}
         </div>
@@ -1182,8 +1227,18 @@ function buildDayCard(day){
         data-ph="Reminders, reservations, anything…"
         spellcheck="false" autocapitalize="sentences"
       >${esc(day.noteText||'')}</div>
+      ${renderDayItems(day.id)}
     </div>
   </div>`;
+}
+
+function renderDayItems(dayId) {
+  const items = ITEMS.filter(i => (i.dayIds||[]).includes(dayId));
+  if (!items.length) return '';
+  return `<div class="notes-head" style="margin-top:14px">packed for today</div>
+    <div style="background:hsl(var(--background));border:1px solid hsl(var(--border));border-radius:var(--rs);padding:0 8px">
+      ${items.map(i => itemRow(i)).join('')}
+    </div>`;
 }
 
 function buildAlert(day){
@@ -1558,7 +1613,7 @@ function renderOutfits(){
         <div class="card-hd${isOpen?' open':''}" onclick="toggleOCard('${day.id}')">
           <div class="card-hd-left">
             <div class="card-num">${day.dayNum}</div>
-            <div class="card-sub">${DOW[day.date.getDay()]} ${fmt(day.date)} · <span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
+            <div class="card-sub">${day.date ? DOW[day.date.getDay()] + ' ' + fmt(day.date) + ' · ' : ''}<span style="color:${dest.color};font-weight:600">${esc(dest.name)}</span></div>
           </div>
           <div class="card-hd-right">
             <span class="card-count">${d.length+n.length} items</span>
@@ -1660,13 +1715,21 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>(i.categoryIds||[]).includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+  const unassigned = ITEMS.filter(i=>(i.categoryIds||[]).length===0);
+  if(unassigned.length>0){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('cat-unassigned');
+    h+=packCard({id:'cat-unassigned',gid:'unassigned',name:'Uncategorized',sub:'Items without a category',
+      count:`${done}/${unassigned.length}`,open,editType:'cat',
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1739,21 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>(i.bagIds||[]).includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+  const unassigned = ITEMS.filter(i=>(i.bagIds||[]).length===0);
+  if(unassigned.length>0){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unassigned Bag',sub:'Items without a location',
+      count:`${done}/${unassigned.length}`,open,editType:'bag',
+      body:unassigned.map(i=>itemRow(i,true)).join('')});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,25 +1763,38 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>(i.purposeIds||[]).includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+  const unassigned = ITEMS.filter(i=>(i.purposeIds||[]).length===0);
+  if(unassigned.length>0){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Unassigned Purpose',sub:'Items without a purpose',
+      count:`${done}/${unassigned.length}`,open,editType:'purpose',
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
+  let firstCat = '';
+  if (showBag && (item.categoryIds||[]).length > 0) {
+    firstCat = CATS.find(c=>c.id===item.categoryIds[0])?.name || '';
+  }
   return`<div class="list-row" data-item-id="${item.id}">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
     <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${firstCat?`<span class="from-lbl">${esc(firstCat)}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
+    <button class="card-menu-btn" style="width:24px;height:24px;font-size:14px;margin-left:auto;" onclick="openEditItem('${item.id}')">✎</button>
   </div>`;
 }
 function packCard({id,gid,name,sub,count,open,editType,body}){
@@ -1792,9 +1876,9 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS.forEach(i=>{i.categoryIds=(i.categoryIds||[]).filter(x=>x!==id)});catOrder=catOrder.filter(x=>x!==id);}
+  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);ITEMS.forEach(i=>{i.bagIds=(i.bagIds||[]).filter(x=>x!==id)});bagOrder=bagOrder.filter(x=>x!==id);}
+  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);ITEMS.forEach(i=>{i.purposeIds=(i.purposeIds||[]).filter(x=>x!==id)});purposeOrder=purposeOrder.filter(x=>x!==id);}
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1816,6 +1900,98 @@ function commitGroup(){
   else{PURPOSES.push({id,name:nm});purposeOrder.push(id);}
   openCards.add((agCtx?.type==='category'?'cat-':agCtx?.type==='bag'?'bag-':'pur-')+id);
   closeAll();Haptic.medium();renderPack();
+}
+
+// ═══════════════════════════════════════
+//  EDIT ITEM OVERLAY
+// ═══════════════════════════════════════
+let editItemDraft = null;
+
+function renderChips(containerId, items, selectedIds, toggleCallback) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = items.map(item => {
+    const isSelected = selectedIds.includes(item.id);
+    return `<div class="vpill ${isSelected ? 'on' : ''}" style="cursor:pointer;padding:6px 12px;margin:0" onclick="${toggleCallback}('${item.id}')">${esc(item.name || item.label || 'Day '+item.dayNum)}</div>`;
+  }).join('');
+}
+
+function openEditItem(itemId) {
+  const item = ITEMS.find(i => i.id === itemId);
+  if (!item) return;
+
+  editItemDraft = {
+    id: item.id,
+    name: item.name,
+    categoryIds: [...(item.categoryIds || [])],
+    bagIds: [...(item.bagIds || [])],
+    purposeIds: [...(item.purposeIds || [])],
+    dayIds: [...(item.dayIds || [])],
+    carry: item.carry
+  };
+
+  document.getElementById('ei-name').value = editItemDraft.name;
+  document.getElementById('ei-carry').checked = editItemDraft.carry;
+
+  refreshEditItemChips();
+
+  openOv('ovEditItem');
+}
+
+function refreshEditItemChips() {
+  if (!editItemDraft) return;
+  renderChips('ei-cats', CATS, editItemDraft.categoryIds, 'toggleEiCat');
+  renderChips('ei-bags', BAGS, editItemDraft.bagIds, 'toggleEiBag');
+  renderChips('ei-purs', PURPOSES, editItemDraft.purposeIds, 'toggleEiPur');
+  renderChips('ei-days', days, editItemDraft.dayIds, 'toggleEiDay');
+}
+
+window.toggleEiCat = function(id) {
+  if (editItemDraft.categoryIds.includes(id)) editItemDraft.categoryIds = editItemDraft.categoryIds.filter(x => x !== id);
+  else editItemDraft.categoryIds.push(id);
+  refreshEditItemChips();
+};
+window.toggleEiBag = function(id) {
+  if (editItemDraft.bagIds.includes(id)) editItemDraft.bagIds = editItemDraft.bagIds.filter(x => x !== id);
+  else editItemDraft.bagIds.push(id);
+  refreshEditItemChips();
+};
+window.toggleEiPur = function(id) {
+  if (editItemDraft.purposeIds.includes(id)) editItemDraft.purposeIds = editItemDraft.purposeIds.filter(x => x !== id);
+  else editItemDraft.purposeIds.push(id);
+  refreshEditItemChips();
+};
+window.toggleEiDay = function(id) {
+  if (editItemDraft.dayIds.includes(id)) editItemDraft.dayIds = editItemDraft.dayIds.filter(x => x !== id);
+  else editItemDraft.dayIds.push(id);
+  refreshEditItemChips();
+};
+
+function saveEditItem() {
+  if (!editItemDraft) return;
+  const item = ITEMS.find(i => i.id === editItemDraft.id);
+  if (!item) return;
+
+  item.name = document.getElementById('ei-name').value.trim() || item.name;
+  item.carry = document.getElementById('ei-carry').checked;
+  item.categoryIds = [...editItemDraft.categoryIds];
+  item.bagIds = [...editItemDraft.bagIds];
+  item.purposeIds = [...editItemDraft.purposeIds];
+  item.dayIds = [...editItemDraft.dayIds];
+
+  // Show passive toast notification
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:hsl(var(--foreground));color:#fff;padding:12px 20px;border-radius:24px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.15);animation:tipIn 0.2s ease;';
+  toast.textContent = 'Saved to Closet';
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+
+  closeAll();
+  Haptic.success();
+  renderPack();
 }
 
 // ═══════════════════════════════════════

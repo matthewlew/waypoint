@@ -582,6 +582,16 @@ body{
 .sh-cancel:hover{background:hsl(var(--secondary));color:hsl(var(--secondary-foreground))}
 .sh-cta.danger{background:hsl(var(--destructive));color:hsl(var(--destructive-foreground))}
 .sh-cta.danger:hover{background:hsl(var(--destructive)/.9)}
+
+.ei-chip {
+  padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--card));
+  color: hsl(var(--muted-foreground)); cursor: pointer; transition: all 0.12s;
+  user-select: none;
+}
+.ei-chip.on {
+  background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+}
 </style>
 </head>
 <body>
@@ -750,6 +760,36 @@ body{
   </div>
 </div>
 
+
+<!-- SHEET: Edit item -->
+<div class="overlay" id="ovEditItem" onclick="if(event.target===this)closeAll()">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-body">
+      <div class="sheet-title">Edit item</div>
+      <input class="sh-inp" id="ei-name" placeholder="Item name..." autocomplete="off">
+      <div class="carry-row" style="padding-bottom:4px">
+        <input type="checkbox" id="ei-carry">
+        <label for="ei-carry">Carry with me</label>
+      </div>
+      <span class="sh-lbl">Assigned Days</span>
+      <div id="ei-days" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Assigned Bags / Locations</span>
+      <div id="ei-bags" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Assigned Categories</span>
+      <div id="ei-cats" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Assigned Purposes</span>
+      <div id="ei-purs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+      <button class="sh-cta" onclick="commitEditItem()">Save Changes</button>
+      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 
@@ -899,8 +939,16 @@ function lookupFlight(code){
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
 function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
-    carry,checked:false,auto,note};
+  return{
+    id:'item-'+(itemIdSeq++),
+    name,
+    categoryIds: catId ? [catId] : [],
+    bagIds: bagId ? [bagId] : [],
+    purposeIds: purId ? [purId] : [],
+    dayIds: [],
+    scenarios: [],
+    carry,checked:false,auto,note
+  };
 }
 
 let CATS=[
@@ -1182,15 +1230,32 @@ function buildDayCard(day){
         data-ph="Reminders, reservations, anything…"
         spellcheck="false" autocapitalize="sentences"
       >${esc(day.noteText||'')}</div>
+
+      <div class="notes-head">assigned items</div>
+      <div style="font-size:14px;color:hsl(var(--card-foreground));line-height:1.6">
+        ${ITEMS.filter(i => (i.dayIds||[]).includes(day.id)).map(i => `<div style="display:inline-block;background:hsl(var(--secondary));padding:2px 8px;border-radius:4px;margin:0 4px 4px 0" onclick="openEditItem('${i.id}')">${esc(i.name)}</div>`).join('') || '<span style="color:hsl(var(--muted-foreground))">No items assigned yet</span>'}
+      </div>
     </div>
   </div>`;
 }
 
 function buildAlert(day){
   const all=(day.dayText+' '+day.nightText).toLowerCase();
-  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
+  const dayItems = ITEMS.filter(i => (i.dayIds||[]).includes(day.id));
+  const dayItemsText = dayItems.map(i => i.name.toLowerCase()).join(' ');
+
+  if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!/swim|bikini/.test(dayItemsText)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  if(/(sleep|rest|chill|lazy day)/.test(all)&&!/sleepwear|pyjama|pajama/.test(all)&&!/sleepwear|pyjama|pajama/.test(dayItemsText)&&!day._dismissed.has('sleepwear'))
+    return`<div class="smart-alert"><div class="sa-text">Rest day — no sleepwear or loungewear added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+
+  if(/(dinner|bar|nightlife|concert|fine dining)/.test(all)&&!/evening outfit|dressy/.test(all)&&!/evening|dress/.test(dayItemsText)&&!day._dismissed.has('evening_outfit'))
+    return`<div class="smart-alert"><div class="sa-text">Evening plans — no evening outfit added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','evening_outfit')">Skip</span></div>`;
+
   return'';
 }
 
@@ -1660,13 +1725,21 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>(i.categoryIds||[]).includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+  const uncatItems = ITEMS.filter(i => !(i.categoryIds||[]).length);
+  if(uncatItems.length > 0){
+    const done=uncatItems.filter(i=>i.checked).length;
+    const open=openCards.has('cat-uncategorized');
+    h+=packCard({id:'cat-uncategorized',gid:'',name:'Uncategorized',sub:'',
+      count:`${done}/${uncatItems.length}`,open,editType:'',
+      body:uncatItems.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','')">+ Add item</div>`});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1749,21 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>(i.bagIds||[]).includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+  const unbaggedItems = ITEMS.filter(i => !(i.bagIds||[]).length);
+  if(unbaggedItems.length > 0){
+    const done=unbaggedItems.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'',name:'Unassigned',sub:'',
+      count:`${done}/${unbaggedItems.length}`,open,editType:'',
+      body:unbaggedItems.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','')">+ Add item</div>`});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,13 +1773,21 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>(i.purposeIds||[]).includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+  const unpurposedItems = ITEMS.filter(i => !(i.purposeIds||[]).length);
+  if(unpurposedItems.length > 0){
+    const done=unpurposedItems.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'',name:'Unassigned',sub:'',
+      count:`${done}/${unpurposedItems.length}`,open,editType:'',
+      body:unpurposedItems.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','')">+ Add item</div>`});
+  }
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
   return h;
 }
@@ -1706,10 +1795,10 @@ function itemRow(item,showBag=false){
   const ck=item.checked;
   return`<div class="list-row" data-item-id="${item.id}">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
-    <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
+    <div class="item-txt${ck?' done':''}" onclick="openEditItem('${item.id}')" style="cursor:pointer">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&(item.categoryIds||[]).length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===(item.categoryIds||[])[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1792,9 +1881,21 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){
+    CATS=CATS.filter(c=>c.id!==id);
+    ITEMS.forEach(i=>i.categoryIds=(i.categoryIds||[]).filter(x=>x!==id));
+    catOrder=catOrder.filter(x=>x!==id);
+  }
+  else if(type==='bag'){
+    BAGS=BAGS.filter(b=>b.id!==id);
+    ITEMS.forEach(i=>i.bagIds=(i.bagIds||[]).filter(x=>x!==id));
+    bagOrder=bagOrder.filter(x=>x!==id);
+  }
+  else{
+    PURPOSES=PURPOSES.filter(p=>p.id!==id);
+    ITEMS.forEach(i=>i.purposeIds=(i.purposeIds||[]).filter(x=>x!==id));
+    purposeOrder=purposeOrder.filter(x=>x!==id);
+  }
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1821,6 +1922,67 @@ function commitGroup(){
 // ═══════════════════════════════════════
 //  COMMIT ITEM
 // ═══════════════════════════════════════
+
+let eiCtx = null;
+function openEditItem(itemId){
+  const item = ITEMS.find(i => i.id === itemId);
+  if(!item) return;
+  eiCtx = { id: itemId,
+            dayIds: new Set(item.dayIds || []),
+            bagIds: new Set(item.bagIds || []),
+            categoryIds: new Set(item.categoryIds || []),
+            purposeIds: new Set(item.purposeIds || []) };
+
+  document.getElementById('ei-name').value = item.name;
+  document.getElementById('ei-carry').checked = item.carry;
+
+  const renderChips = (containerId, source, labelProp, setRef) => {
+    const c = document.getElementById(containerId);
+    c.innerHTML = source.map(s => {
+      const isOn = setRef.has(s.id);
+      return `<div class="ei-chip${isOn ? ' on' : ''}" onclick="toggleEiChip(this, '${s.id}', '${containerId}')">${esc(s[labelProp])}</div>`;
+    }).join('');
+  };
+
+  renderChips('ei-days', days, 'dayNum', eiCtx.dayIds);
+  renderChips('ei-bags', BAGS, 'name', eiCtx.bagIds);
+  renderChips('ei-cats', CATS, 'name', eiCtx.categoryIds);
+  renderChips('ei-purs', PURPOSES, 'name', eiCtx.purposeIds);
+
+  openOv('ovEditItem');
+  setTimeout(()=>document.getElementById('ei-name').focus(), 280);
+}
+
+function toggleEiChip(el, id, containerId) {
+  const setRef = containerId === 'ei-days' ? eiCtx.dayIds :
+                 containerId === 'ei-bags' ? eiCtx.bagIds :
+                 containerId === 'ei-cats' ? eiCtx.categoryIds : eiCtx.purposeIds;
+  if(setRef.has(id)) {
+    setRef.delete(id); el.classList.remove('on');
+  } else {
+    setRef.add(id); el.classList.add('on');
+  }
+  Haptic.light();
+}
+
+function commitEditItem() {
+  if(!eiCtx) return;
+  const item = ITEMS.find(i => i.id === eiCtx.id);
+  if(!item) return;
+  item.name = document.getElementById('ei-name').value.trim() || item.name;
+  item.carry = document.getElementById('ei-carry').checked;
+  item.dayIds = [...eiCtx.dayIds];
+  item.bagIds = [...eiCtx.bagIds];
+  item.categoryIds = [...eiCtx.categoryIds];
+  item.purposeIds = [...eiCtx.purposeIds];
+
+  closeAll();
+  Haptic.medium();
+  renderPack();
+  renderOutfits();
+  renderDays(); // to update day attachments
+}
+
 function commitItem(){
   const nm=document.getElementById('ai-inp').value.trim();if(!nm||!aiCtx)return;
   const carry=document.getElementById('ai-carry').checked;

@@ -662,8 +662,39 @@ body{
         <button class="vpill on" onclick="setPackView('category')">By category</button>
         <button class="vpill"    onclick="setPackView('bag')">By bag</button>
         <button class="vpill"    onclick="setPackView('purpose')">By purpose</button>
+        <button class="vpill"    onclick="setPackView('day')">By day</button>
       </div>
       <div class="pack-wrap" id="packContent"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SHEET: Edit Item -->
+<div class="overlay" id="ovEditItem" onclick="if(event.target===this)closeAll()">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-body">
+      <div class="sheet-title">Edit item</div>
+      <input class="sh-inp" id="ei-name" autocomplete="off" placeholder="Item name">
+      <div class="carry-row">
+        <input type="checkbox" id="ei-carry">
+        <label for="ei-carry">Carry with me</label>
+      </div>
+
+      <span class="sh-lbl">Days</span>
+      <div id="ei-days" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Categories</span>
+      <div id="ei-cats" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Bags / Locations</span>
+      <div id="ei-bags" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+
+      <span class="sh-lbl">Purposes</span>
+      <div id="ei-purs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+
+      <button class="sh-cta" onclick="commitEditItem()">Save item</button>
+      <button class="sh-cancel" onclick="closeAll()">Cancel</button>
     </div>
   </div>
 </div>
@@ -674,6 +705,9 @@ body{
   <div class="tip-cat"  id="tipCat"></div>
   <div class="tip-items" id="tipItems"></div>
 </div>
+
+<!-- TOAST -->
+<div id="toast" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);opacity:0;background:hsl(var(--foreground));color:#fff;padding:10px 20px;border-radius:20px;font-size:14px;font-weight:500;transition:all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);z-index:1000;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
 
 <!-- SHEET: Edit trip -->
 <div class="overlay" id="ovET" onclick="if(event.target===this)closeAll()">
@@ -898,8 +932,12 @@ function lookupFlight(code){
 //  ITEM STORE
 // ═══════════════════════════════════════
 let ITEMS=[];let itemIdSeq=1;
-function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false){
-  return{id:'item-'+(itemIdSeq++),name,categoryId:catId,bagId,purposeId:purId,
+function mkItem(name,catId,bagId,purId,carry=false,note='',auto=false, dayId=null){
+  return{id:'item-'+(itemIdSeq++),name,
+    categoryIds: catId ? [catId] : [],
+    bagIds: bagId ? [bagId] : [],
+    purposeIds: purId ? [purId] : [],
+    dayIds: dayId ? [dayId] : [],
     carry,checked:false,auto,note};
 }
 
@@ -956,7 +994,7 @@ let openCards=new Set();
 let packView='category';
 let outView='pack';
 let customOut={};
-let aiCtx=null,editCtx=null,agCtx=null;
+let aiCtx=null,editCtx=null,agCtx=null,editItemCtx=null;
 let whoArr=[];
 let catOrder,bagOrder,purposeOrder;
 
@@ -1133,11 +1171,13 @@ function renderBanners(){
   if(T.destinations.length){
     const d0=T.destinations[0].name.toLowerCase();
     if(/mammoth|tahoe|aspen|vail|park city/.test(d0))
-      h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Expect 15–30°F. Pack base layers, waterproof outer, gloves.</div>`;
+      h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Expect 15–30°F. Pack base layers for cold mornings, waterproof outer, gloves.</div>`;
     else if(/hawaii|cancun|miami|bali|tulum/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Hot and humid. Light fabrics, SPF, one light layer for A/C.</div>`;
     else if(/london|paris|amsterdam|edinburgh/.test(d0))
       h+=`<div class="banner info"><strong>${esc(T.destinations[0].name)}:</strong> Variable weather — layers and a compact rain jacket.</div>`;
+    else
+      h+=`<div class="banner info"><strong>Weather check:</strong> Don't forget to check the forecast for ${esc(T.destinations[0].name)} to adapt your outfits.</div>`;
   }
   document.getElementById('banners').innerHTML=h;
 }
@@ -1191,6 +1231,17 @@ function buildAlert(day){
   if(/(hot tub|jacuzzi|pool|hot spring)/.test(all)&&!/swim|beach|swimwear/.test(all)&&!day._dismissed.has('swim'))
     return`<div class="smart-alert"><div class="sa-text">Hot tub or pool — swimsuit not detected yet.</div>
       <span class="sa-skip" onclick="dismiss('${day.id}','swim')">Skip</span></div>`;
+
+  const itemsForDay=ITEMS.filter(i=>(i.dayIds||[]).includes(day.id)).map(i=>i.name.toLowerCase());
+
+  if(day.nightText&&!day._dismissed.has('sleepwear')&&!itemsForDay.some(n=>n.includes('sleep')||n.includes('pyjama')||n.includes('pajama')))
+    return`<div class="smart-alert"><div class="sa-text">No sleepwear added for this day yet.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','sleepwear')">Skip</span></div>`;
+
+  if(day.nightText&&!day._dismissed.has('evening')&&!itemsForDay.some(n=>n.includes('outfit')||n.includes('dress')||n.includes('suit')))
+    return`<div class="smart-alert"><div class="sa-text">No evening outfit added.</div>
+      <span class="sa-skip" onclick="dismiss('${day.id}','evening')">Skip</span></div>`;
+
   return'';
 }
 
@@ -1612,10 +1663,12 @@ function openAddOutfit(dayId,slot){
 function setPackView(v){
   packView=v;
   document.querySelectorAll('.vpill').forEach((b,i)=>{
-    b.classList.toggle('on',['category','bag','purpose'][i]===v);});
-  const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group'};
+    b.classList.toggle('on',['category','bag','purpose','day'][i]===v);});
+  const labels={category:'+ Category',bag:'+ Bag',purpose:'+ Group',day:''};
   const sa=document.getElementById('packSecAct');
-  sa.textContent=labels[v];sa.onclick=()=>openAddGroup(v);
+  sa.textContent=labels[v]||'';
+  if(labels[v]) sa.onclick=()=>openAddGroup(v);
+  else sa.onclick=null;
   Haptic.light();renderPack();
 }
 function renderPack(){
@@ -1637,7 +1690,8 @@ function renderPack(){
   let html='';
   if(packView==='category') html=renderByCategory();
   else if(packView==='bag') html=renderByBag();
-  else html=renderByPurpose();
+  else if(packView==='purpose') html=renderByPurpose();
+  else html=renderByDay();
   document.getElementById('packContent').innerHTML=html;
   const cgl=document.getElementById('cardGroupList');
   if(cgl)initDrag(cgl,newOrder=>{
@@ -1660,13 +1714,24 @@ function renderByCategory(){
   let h=`<div class="pack-note">Items marked <strong>carry</strong> go in your bag or backpack, not checked luggage.</div>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(cat=>{
-    const items=ITEMS.filter(i=>i.categoryId===cat.id);
+    const items=ITEMS.filter(i=>(i.categoryIds||[]).includes(cat.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('cat-'+cat.id);
     h+=packCard({id:'cat-'+cat.id,gid:cat.id,name:cat.name,sub:cat.desc||'',
       count:`${done}/${items.length}`,open,editType:'cat',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('cat','${cat.id}')">+ Add item</div>`});
   });
+
+  // Uncategorized items fallback
+  const unassigned=ITEMS.filter(i=>(i.categoryIds||[]).length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('cat-uncategorized');
+    h+=packCard({id:'cat-uncategorized',gid:'uncategorized',name:'Uncategorized',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:null,
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('category')">+ Add category</button>`;
   return h;
 }
@@ -1676,13 +1741,24 @@ function renderByBag(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by where things physically live.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(bag=>{
-    const items=ITEMS.filter(i=>i.bagId===bag.id);
+    const items=ITEMS.filter(i=>(i.bagIds||[]).includes(bag.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('bag-'+bag.id);
     h+=packCard({id:'bag-'+bag.id,gid:bag.id,name:bag.name,sub:bag.desc,
       count:`${done}/${items.length}`,open,editType:'bag',
       body:items.map(i=>itemRow(i,true)).join('')+`<div class="row-add" onclick="openAddItem('bag','${bag.id}')">+ Add item</div>`});
   });
+
+  // Unassigned items fallback
+  const unassigned=ITEMS.filter(i=>(i.bagIds||[]).length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('bag-unassigned');
+    h+=packCard({id:'bag-unassigned',gid:'unassigned',name:'Unassigned',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:null,
+      body:unassigned.map(i=>itemRow(i,true)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('bag')">+ Add bag or location</button>`;
   return h;
 }
@@ -1692,24 +1768,62 @@ function renderByPurpose(){
   let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by trip function.</p>
     <div class="card-group-list" id="cardGroupList">`;
   ordered.forEach(pur=>{
-    const items=ITEMS.filter(i=>i.purposeId===pur.id);
+    const items=ITEMS.filter(i=>(i.purposeIds||[]).includes(pur.id));
     const done=items.filter(i=>i.checked).length;
     const open=openCards.has('pur-'+pur.id);
     h+=packCard({id:'pur-'+pur.id,gid:pur.id,name:pur.name,sub:'',
       count:`${done}/${items.length}`,open,editType:'purpose',
       body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('pur','${pur.id}')">+ Add item</div>`});
   });
+
+  // Unassigned items fallback
+  const unassigned=ITEMS.filter(i=>(i.purposeIds||[]).length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('pur-unassigned');
+    h+=packCard({id:'pur-unassigned',gid:'unassigned',name:'Unassigned',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:null,
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
   h+=`</div><button class="add-card-btn" onclick="openAddGroup('purpose')">+ Add group</button>`;
+  return h;
+}
+
+function renderByDay(){
+  let h=`<p style="font-size:14px;color:hsl(var(--muted-foreground));padding:10px 0 4px">Organised by itinerary day.</p>
+    <div class="card-group-list">`;
+
+  days.forEach(day=>{
+    const items=ITEMS.filter(i=>(i.dayIds||[]).includes(day.id));
+    const done=items.filter(i=>i.checked).length;
+    const open=openCards.has('day-'+day.id);
+    const dest = T.destinations[day.destIdx];
+    h+=packCard({id:'day-'+day.id,gid:day.id,name:`Day ${day.dayNum}`,sub:dest?.name||'',
+      count:`${done}/${items.length}`,open,editType:null,
+      body:items.map(i=>itemRow(i)).join('')+`<div class="row-add" onclick="openAddItem('day','${day.id}')">+ Add item</div>`});
+  });
+
+  const unassigned=ITEMS.filter(i=>(i.dayIds||[]).length===0);
+  if(unassigned.length){
+    const done=unassigned.filter(i=>i.checked).length;
+    const open=openCards.has('day-unassigned');
+    h+=packCard({id:'day-unassigned',gid:'unassigned',name:'Unassigned to day',sub:'',
+      count:`${done}/${unassigned.length}`,open,editType:null,
+      body:unassigned.map(i=>itemRow(i)).join('')});
+  }
+
+  h+=`</div>`;
   return h;
 }
 function itemRow(item,showBag=false){
   const ck=item.checked;
   return`<div class="list-row" data-item-id="${item.id}">
     <div class="cb${ck?' on':''}" onclick="toggleItem('${item.id}')"></div>
-    <div class="item-txt${ck?' done':''}">${esc(item.name)}</div>
+    <div class="item-txt${ck?' done':''}" onclick="openEditItem('${item.id}')" style="cursor:pointer;">${esc(item.name)}</div>
     ${item.carry?`<span class="carry-lbl">carry</span>`:''}
     ${item.note?`<span class="item-note">${esc(item.note)}</span>`:''}
-    ${showBag&&item.categoryId?`<span class="from-lbl">${esc(CATS.find(c=>c.id===item.categoryId)?.name||'')}</span>`:''}
+    ${showBag&&(item.categoryIds||[]).length?`<span class="from-lbl">${esc(CATS.find(c=>c.id===(item.categoryIds||[])[0])?.name||'')}</span>`:''}
     <div class="synced-dot" title="Synced across all views"></div>
   </div>`;
 }
@@ -1722,12 +1836,11 @@ function packCard({id,gid,name,sub,count,open,editType,body}){
       </div>
       <div class="card-hd-right">
         <span class="card-count">${count}</span>
-        <button class="card-menu-btn" aria-label="Options">⋯
+        ${editType?`<button class="card-menu-btn" aria-label="Options" onclick="event.stopPropagation(); this.nextElementSibling.classList.toggle('open');">⋯</button>
           <div class="card-dropdown">
             <div class="dd-item" onclick="openEditGroup('${editType}','${gid}')">Rename / edit</div>
             <div class="dd-item danger" onclick="removeGroup('${editType}','${gid}')">Remove</div>
-          </div>
-        </button>
+          </div>`:''}
         <span class="chevron${open?' open':''}">▼</span>
       </div>
     </div>
@@ -1759,8 +1872,15 @@ function toggleItem(itemId){
 }
 function openAddItem(viewType,groupId){
   aiCtx={type:'packitem',viewType,groupId};
-  const groupName=viewType==='cat'?CATS.find(c=>c.id===groupId)?.name:
-    viewType==='bag'?BAGS.find(b=>b.id===groupId)?.name:PURPOSES.find(p=>p.id===groupId)?.name;
+  let groupName='';
+  if(viewType==='cat') groupName=CATS.find(c=>c.id===groupId)?.name;
+  else if(viewType==='bag') groupName=BAGS.find(b=>b.id===groupId)?.name;
+  else if(viewType==='pur') groupName=PURPOSES.find(p=>p.id===groupId)?.name;
+  else if(viewType==='day') {
+    const d=days.find(x=>x.id===groupId);
+    if(d) groupName=`Day ${d.dayNum}`;
+  }
+
   document.getElementById('ai-title').textContent='Add item';
   document.getElementById('ai-sub').textContent=groupName||'';
   document.getElementById('ai-inp').value='';
@@ -1792,9 +1912,21 @@ function commitEdit(){
 }
 function commitRemove(){if(editCtx)removeGroup(editCtx.type,editCtx.id);}
 function removeGroup(type,id){
-  if(type==='cat'){CATS=CATS.filter(c=>c.id!==id);ITEMS=ITEMS.filter(i=>i.categoryId!==id);catOrder=catOrder.filter(x=>x!==id);}
-  else if(type==='bag'){BAGS=BAGS.filter(b=>b.id!==id);bagOrder=bagOrder.filter(x=>x!==id);}
-  else{PURPOSES=PURPOSES.filter(p=>p.id!==id);purposeOrder=purposeOrder.filter(x=>x!==id);}
+  if(type==='cat'){
+    CATS=CATS.filter(c=>c.id!==id);
+    ITEMS.forEach(i => { i.categoryIds = (i.categoryIds||[]).filter(x => x !== id); });
+    catOrder=catOrder.filter(x=>x!==id);
+  }
+  else if(type==='bag'){
+    BAGS=BAGS.filter(b=>b.id!==id);
+    ITEMS.forEach(i => { i.bagIds = (i.bagIds||[]).filter(x => x !== id); });
+    bagOrder=bagOrder.filter(x=>x!==id);
+  }
+  else{
+    PURPOSES=PURPOSES.filter(p=>p.id!==id);
+    ITEMS.forEach(i => { i.purposeIds = (i.purposeIds||[]).filter(x => x !== id); });
+    purposeOrder=purposeOrder.filter(x=>x!==id);
+  }
   Haptic.medium();closeAll();renderPack();
 }
 function openAddGroup(type){
@@ -1818,9 +1950,66 @@ function commitGroup(){
   closeAll();Haptic.medium();renderPack();
 }
 
+function openEditItem(itemId){
+  const item=ITEMS.find(i=>i.id===itemId);if(!item)return;
+  editItemCtx={id:itemId,draft:JSON.parse(JSON.stringify(item))};
+  document.getElementById('ei-name').value=item.name;
+  document.getElementById('ei-carry').checked=item.carry;
+
+  const buildToggles=(list,selectedIds,key,labelKey='name')=>{
+    return list.map(obj=>{
+      const isSel=(selectedIds||[]).includes(obj.id);
+      return `<label style="display:flex;align-items:center;gap:4px;font-size:14px;background:hsl(var(--secondary));padding:4px 8px;border-radius:var(--rs);cursor:pointer;border:1px solid ${isSel?'hsl(var(--primary))':'transparent'}">
+        <input type="checkbox" style="display:none" ${isSel?'checked':''}
+          onchange="updateEditItemDraft('${key}','${obj.id}',this.checked);this.parentElement.style.borderColor=this.checked?'hsl(var(--primary))':'transparent'">
+        ${esc(obj[labelKey])}
+      </label>`;
+    }).join('');
+  };
+
+  document.getElementById('ei-days').innerHTML=buildToggles(days.map(d=>({id:d.id, name:`Day ${d.dayNum}`})), item.dayIds, 'dayIds');
+  document.getElementById('ei-cats').innerHTML=buildToggles(CATS, item.categoryIds, 'categoryIds');
+  document.getElementById('ei-bags').innerHTML=buildToggles(BAGS, item.bagIds, 'bagIds');
+  document.getElementById('ei-purs').innerHTML=buildToggles(PURPOSES, item.purposeIds, 'purposeIds');
+
+  openOv('ovEditItem');
+}
+
+function updateEditItemDraft(arrKey,id,isChecked){
+  if(!editItemCtx)return;
+  let arr=editItemCtx.draft[arrKey]||[];
+  if(isChecked){ if(!arr.includes(id))arr.push(id); }
+  else{ arr=arr.filter(x=>x!==id); }
+  editItemCtx.draft[arrKey]=arr;
+}
+
+function commitEditItem(){
+  if(!editItemCtx)return;
+  const item=ITEMS.find(i=>i.id===editItemCtx.id);if(!item)return;
+  const nm=document.getElementById('ei-name').value.trim();
+  if(nm) item.name=nm;
+  item.carry=document.getElementById('ei-carry').checked;
+  item.dayIds=editItemCtx.draft.dayIds||[];
+  item.categoryIds=editItemCtx.draft.categoryIds||[];
+  item.bagIds=editItemCtx.draft.bagIds||[];
+  item.purposeIds=editItemCtx.draft.purposeIds||[];
+  closeAll();Haptic.medium();renderPack();
+}
+
 // ═══════════════════════════════════════
 //  COMMIT ITEM
 // ═══════════════════════════════════════
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.transform='translateX(-50%) translateY(0)';
+  el.style.opacity='1';
+  setTimeout(()=>{
+    el.style.transform='translateX(-50%) translateY(100px)';
+    el.style.opacity='0';
+  }, 2500);
+}
+
 function commitItem(){
   const nm=document.getElementById('ai-inp').value.trim();if(!nm||!aiCtx)return;
   const carry=document.getElementById('ai-carry').checked;
@@ -1829,13 +2018,17 @@ function commitItem(){
     if(!customOut[key])customOut[key]=[];
     customOut[key].push(nm);if(carry)CARRY_SET.add(nm);
     closeAll();Haptic.medium();renderOutfits();
+    showToast("Saved to Closet");
   }else if(aiCtx.type==='packitem'){
     let catId='health',bagId='main',purId='toiletry';
+    let dayId=null;
     if(aiCtx.viewType==='cat'){catId=aiCtx.groupId;purId=CATS.find(c=>c.id===aiCtx.groupId)?.type==='toi'?'toiletry':'tech';}
     else if(aiCtx.viewType==='bag'){bagId=aiCtx.groupId;}
-    else{purId=aiCtx.groupId;}
-    ITEMS.push(mkItem(nm,catId,bagId,purId,carry));
+    else if(aiCtx.viewType==='day'){dayId=aiCtx.groupId; catId=null; bagId=null; purId=null;}
+    else{purId=aiCtx.groupId; catId=null; bagId=null;}
+    ITEMS.push(mkItem(nm,catId,bagId,purId,carry,'',false,dayId));
     closeAll();Haptic.medium();renderPack();
+    showToast("Saved to Closet");
   }
 }
 

@@ -1,0 +1,11 @@
+{
+  "name": "waypoint",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.62.1",
+    "playwright": "^1.42.1"
+  }
+}
